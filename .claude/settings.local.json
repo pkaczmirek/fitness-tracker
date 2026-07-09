@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(foreach \\($c in 'flutter','node','npm','java','gradle','adb'\\) { $cmd = Get-Command $c -ErrorAction SilentlyContinue; if \\($cmd\\) { \"$c => $\\($cmd.Source\\)\" } else { \"$c => NICHT gefunden\" } })"
-    ]
-  }
-}
