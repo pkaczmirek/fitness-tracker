@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2a78d6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1a19" media="(prefers-color-scheme: dark)">
+  <title>Fitness Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="header-row">
+      <h1 class="app-title">Fitness Tracker</h1>
+      <span id="challengeBadge" class="challenge-badge"></span>
+    </div>
+    <div class="day-nav" id="dayNav">
+      <button id="prevDay" class="icon-btn" aria-label="Vorheriger Tag">‹</button>
+      <div class="day-nav-center">
+        <input type="date" id="datePicker" aria-label="Datum wählen">
+        <button id="todayBtn" class="chip-btn" hidden>Heute</button>
+      </div>
+      <button id="nextDay" class="icon-btn" aria-label="Nächster Tag">›</button>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ===== Heute ===== -->
+    <section id="view-today" class="view">
+
+      <div class="card" id="cardWeight">
+        <div class="card-head">
+          <h2>⚖️ Gewicht</h2>
+        </div>
+        <div class="weight-row">
+          <input type="number" id="weightInput" inputmode="decimal" step="0.1" min="20" max="300" placeholder="–">
+          <span class="unit">kg</span>
+          <button id="weightSave" class="btn btn-primary">Speichern</button>
+        </div>
+        <p class="hint" id="weightHint"></p>
+      </div>
+
+      <div class="card" id="cardWater">
+        <div class="card-head">
+          <h2>💧 Wasser</h2>
+          <button class="link-btn" id="waterEditBtn">Korrigieren</button>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill water" id="waterFill"></div></div>
+          <div class="progress-label" id="waterLabel"></div>
+        </div>
+        <div class="quick-btns">
+          <button class="btn water-add" data-ml="200">+200&nbsp;ml</button>
+          <button class="btn water-add" data-ml="300">+300&nbsp;ml</button>
+          <button class="btn water-add" data-ml="500">+500&nbsp;ml</button>
+        </div>
+      </div>
+
+      <div class="card" id="cardMeals">
+        <div class="card-head">
+          <h2>🍽️ Kalorien</h2>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill kcal" id="kcalFill"></div></div>
+          <div class="progress-label" id="kcalLabel"></div>
+        </div>
+        <div id="mealsContainer"></div>
+      </div>
+
+      <div class="card" id="cardTraining">
+        <div class="card-head">
+          <h2>🏋️ Training</h2>
+        </div>
+        <div id="trainingContainer"></div>
+      </div>
+
+    </section>
+
+    <!-- ===== Verlauf ===== -->
+    <section id="view-history" class="view" hidden>
+      <div class="card">
+        <div class="card-head"><h2>Gewichtsverlauf</h2></div>
+        <div id="weightChart" class="chart-wrap"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Tage</h2></div>
+        <div id="historyList"></div>
+      </div>
+    </section>
+
+    <!-- ===== Verwalten ===== -->
+    <section id="view-manage" class="view" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>🏋️ Meine Trainings</h2>
+          <button class="btn btn-primary" id="addWorkoutBtn">+ Neu</button>
+        </div>
+        <p class="hint">Definiere hier die Workouts der Challenge, damit du sie beim Erfassen nur noch auswählen musst.</p>
+        <div id="workoutList"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>🥗 Lebensmittel</h2>
+          <button class="btn btn-primary" id="addFoodBtn">+ Neu</button>
+        </div>
+        <p class="hint">Wiederverwendbare Lebensmittel und Gerichte mit Kalorien pro Portion.</p>
+        <div id="foodList"></div>
+      </div>
+    </section>
+
+    <!-- ===== Mehr ===== -->
+    <section id="view-more" class="view" hidden>
+      <div class="card">
+        <div class="card-head"><h2>🎯 Ziele &amp; Challenge</h2></div>
+        <form id="settingsForm" class="settings-form">
+          <label>Start der Challenge (Tag 1)
+            <input type="date" id="setStart" required>
+          </label>
+          <label>Dauer der Challenge (Tage)
+            <input type="number" id="setDays" min="1" max="365" required>
+          </label>
+          <label>Kalorienziel pro Tag (kcal)
+            <input type="number" id="setKcal" min="500" max="10000" step="50" required>
+          </label>
+          <label>Wasserziel pro Tag (Liter)
+            <input type="number" id="setWater" min="0.5" max="10" step="0.1" required>
+          </label>
+          <button type="submit" class="btn btn-primary">Speichern</button>
+          <p class="hint" id="settingsHint"></p>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>📤 Export</h2></div>
+        <p class="hint">Erstellt eine Excel-Datei mit Tagesübersicht, Mahlzeiten und Trainings – zum Teilen oder Herunterladen.</p>
+        <button class="btn btn-primary btn-block" id="exportExcelBtn">Als Excel exportieren</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>💾 Datensicherung</h2></div>
+        <p class="hint">Alle Daten liegen nur auf diesem Gerät. Mach regelmäßig ein Backup!</p>
+        <div class="quick-btns">
+          <button class="btn" id="backupBtn">Backup erstellen (JSON)</button>
+          <button class="btn" id="restoreBtn">Backup einspielen</button>
+        </div>
+        <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="today"><span class="tab-icon">📅</span>Heute</button>
+    <button class="tab" data-view="history"><span class="tab-icon">📈</span>Verlauf</button>
+    <button class="tab" data-view="manage"><span class="tab-icon">📋</span>Verwalten</button>
+    <button class="tab" data-view="more"><span class="tab-icon">⚙️</span>Mehr</button>
+  </nav>
+
+  <!-- ===== Dialoge ===== -->
+
+  <dialog id="mealDialog">
+    <form method="dialog" class="dialog-form" id="mealForm">
+      <h3 id="mealDialogTitle">Eintrag hinzufügen</h3>
+      <label>Aus Lebensmittel-Datenbank
+        <input type="text" id="mealSearch" placeholder="Suchen …" autocomplete="off">
+      </label>
+      <div id="mealSuggestions" class="suggestions"></div>
+      <label>Bezeichnung
+        <input type="text" id="mealName" required maxlength="80" placeholder="z. B. Haferflocken mit Banane">
+      </label>
+      <div class="form-row">
+        <label>kcal / Portion
+          <input type="number" id="mealKcal" inputmode="numeric" min="0" max="10000" required>
+        </label>
+        <label>Portionen
+          <input type="number" id="mealQty" inputmode="decimal" min="0.25" max="20" step="0.25" value="1" required>
+        </label>
+      </div>
+      <p class="hint" id="mealTotalHint"></p>
+      <label class="checkbox-label" id="mealSaveFoodWrap">
+        <input type="checkbox" id="mealSaveFood"> In Lebensmittel-Datenbank speichern
+      </label>
+      <div class="dialog-btns">
+        <button type="button" class="btn" data-close>Abbrechen</button>
+        <button type="submit" class="btn btn-primary" id="mealSubmit">Hinzufügen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="workoutDialog">
+    <form method="dialog" class="dialog-form" id="workoutForm">
+      <h3 id="workoutDialogTitle">Training definieren</h3>
+      <label>Name
+        <input type="text" id="woName" required maxlength="60" placeholder="z. B. Meltdown">
+      </label>
+      <label>Art der Auswertung
+        <select id="woScheme">
+          <option value="amrap">Möglichst viele Runden in X Minuten</option>
+          <option value="fixedRounds">Feste Rundenzahl – Wiederholungen pro Runde zählen</option>
+          <option value="time">Feste Aufgabe – Zeit stoppen</option>
+          <option value="free">Freies Ergebnis (Text)</option>
+        </select>
+      </label>
+      <label id="woMinutesWrap">Zeitvorgabe (Minuten)
+        <input type="number" id="woMinutes" min="1" max="180" value="20">
+      </label>
+      <label id="woRoundsWrap" hidden>Anzahl Runden
+        <input type="number" id="woRounds" min="1" max="30" value="6">
+      </label>
+      <label>Übungen / Beschreibung (optional)
+        <textarea id="woNote" rows="3" maxlength="400" placeholder="z. B. Liegestütze, Kniebeugen, Klimmzüge …"></textarea>
+      </label>
+      <div class="dialog-btns">
+        <button type="button" class="btn" data-close>Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="logDialog">
+    <form method="dialog" class="dialog-form" id="logForm">
+      <h3 id="logDialogTitle">Training erfassen</h3>
+      <label id="logWorkoutWrap">Training
+        <select id="logWorkout"></select>
+      </label>
+      <p class="hint" id="logWorkoutInfo"></p>
+      <div id="logFields"></div>
+      <label>Notiz (optional)
+        <input type="text" id="logNote" maxlength="200" placeholder="z. B. sehr anstrengend heute">
+      </label>
+      <div class="dialog-btns">
+        <button type="button" class="btn" data-close>Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="foodDialog">
+    <form method="dialog" class="dialog-form" id="foodForm">
+      <h3 id="foodDialogTitle">Lebensmittel</h3>
+      <label>Name
+        <input type="text" id="foodName" required maxlength="80">
+      </label>
+      <label>kcal pro Portion
+        <input type="number" id="foodKcal" inputmode="numeric" min="0" max="10000" required>
+      </label>
+      <div class="dialog-btns">
+        <button type="button" class="btn" data-close>Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="waterDialog">
+    <form method="dialog" class="dialog-form" id="waterForm">
+      <h3>Wassermenge korrigieren</h3>
+      <label>Menge heute (ml)
+        <input type="number" id="waterExact" min="0" max="20000" step="50" required>
+      </label>
+      <div class="dialog-btns">
+        <button type="button" class="btn" data-close>Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Übernehmen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
