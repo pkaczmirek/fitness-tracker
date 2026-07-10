@@ -64,17 +64,16 @@
   /* ---------- Speicher ---------- */
 
   function defaultData() {
-    // Standard: heute ist Tag 39 der 90-Tage-Challenge
-    const start = new Date();
-    start.setDate(start.getDate() - 38);
     return {
       version: 2,
       settings: {
-        challengeStart: toKey(start),
+        // Tag 1 der 90-Tage-Challenge (unter „Mehr" änderbar)
+        challengeStart: '2026-06-01',
         challengeDays: 90,
         kcalGoal: 2200,
         waterGoal: 3000,
-        fastingWindow: 6
+        fastingWindow: 6,
+        sleepGoal: 7.5
       },
       workouts: [],
       foods: [],
@@ -142,7 +141,8 @@
     const d = data.days[key];
     if (!d) return;
     const hasMeals = (d.meals || []).length > 0;
-    if (d.weight == null && !d.water && !hasMeals && !d.training) delete data.days[key];
+    if (d.weight == null && !d.water && !hasMeals && !d.training &&
+        !d.sleepOk && !d.noSweets) delete data.days[key];
   }
 
   function dayKcal(day) {
@@ -177,6 +177,34 @@
       last: toHM(last),
       ok: spanH <= data.settings.fastingWindow
     };
+  }
+
+  /* Schlaf-Ziel: an wie vielen der erfassten Tage erreicht */
+  function sleepStats() {
+    const keys = Object.keys(data.days);
+    const achieved = keys.filter((k) => data.days[k].sleepOk).length;
+    return { achieved, total: keys.length };
+  }
+
+  /* Süßigkeiten-Streak: Tage am Stück (heute zählt erst, wenn angehakt;
+     ein noch nicht angehakter heutiger Tag bricht den Streak nicht) */
+  function sweetsStreak() {
+    let k = todayKey();
+    let streak = 0;
+    if (!(data.days[k] && data.days[k].noSweets)) k = addDays(k, -1);
+    while (data.days[k] && data.days[k].noSweets) {
+      streak++;
+      k = addDays(k, -1);
+    }
+    // Rekord: längste Serie aufeinanderfolgender Kalendertage
+    let best = 0, run = 0, prev = null;
+    for (const key of Object.keys(data.days).sort()) {
+      if (!data.days[key].noSweets) continue;
+      run = (prev && addDays(prev, 1) === key) ? run + 1 : 1;
+      best = Math.max(best, run);
+      prev = key;
+    }
+    return { streak, best };
   }
 
   /* ---------- Zustand ---------- */
@@ -260,6 +288,12 @@
       hint = `Letzter Wert: ${fmt(prev.weight, 1)} kg (${formatDateLong(prev.key)})`;
     }
     $('#weightHint').textContent = hint;
+
+    // Tagesziele (Checkboxen)
+    $('#checkSleepLabel').textContent =
+      `Mindestens ${data.settings.sleepGoal.toLocaleString('de-DE')} h geschlafen`;
+    $('#checkSleep').checked = !!day.sleepOk;
+    $('#checkSweets').checked = !!day.noSweets;
 
     // Wasser
     const water = day.water || 0;
@@ -451,6 +485,36 @@
   /* ---------- Verlauf ---------- */
 
   function renderHistory() {
+    // Erfolge: Schlaf-Quote und Süßigkeiten-Streak
+    const sc = $('#statsContainer');
+    sc.innerHTML = '';
+    const sleep = sleepStats();
+    const sweets = sweetsStreak();
+    const goalTxt = data.settings.sleepGoal.toLocaleString('de-DE');
+    sc.append(
+      el('div', { class: 'stat-row' },
+        el('span', { class: 'stat-icon' }, '😴'),
+        el('div', { class: 'stat-main' },
+          el('div', { class: 'stat-value' },
+            sleep.total ? `${fmt((sleep.achieved / sleep.total) * 100)} %` : '–'),
+          el('div', { class: 'stat-label' },
+            sleep.total
+              ? `Schlaf ≥ ${goalTxt} h: ${sleep.achieved} von ${sleep.total} erfassten Tagen`
+              : `Schlaf ≥ ${goalTxt} h: noch keine Tage erfasst`)
+        )
+      ),
+      el('div', { class: 'stat-row' },
+        el('span', { class: 'stat-icon' }, '🍬'),
+        el('div', { class: 'stat-main' },
+          el('div', { class: 'stat-value' },
+            `${sweets.streak} ${sweets.streak === 1 ? 'Tag' : 'Tage'}`),
+          el('div', { class: 'stat-label' },
+            'am Stück ohne Süßigkeiten' +
+            (sweets.best > sweets.streak ? ` · Rekord: ${sweets.best}` : ''))
+        )
+      )
+    );
+
     renderWeightChart();
 
     const list = $('#historyList');
@@ -471,6 +535,8 @@
       }
       if (day.water) facts.push(`💧 ${fmt(day.water / 1000, 1)} L`);
       if (day.weight != null) facts.push(`⚖️ ${fmt(day.weight, 1)} kg`);
+      if (day.sleepOk) facts.push('😴 ✓');
+      if (day.noSweets) facts.push('🍬-frei');
       if (day.training) {
         const w = day.training.restDay ? null : workoutById(day.training.workoutId);
         facts.push(day.training.restDay ? '😌 Ruhetag' : `🏋️ ${w ? w.name : 'Training'}`);
@@ -696,6 +762,7 @@
     $('#setKcal').value = data.settings.kcalGoal;
     $('#setWater').value = data.settings.waterGoal / 1000;
     $('#setFasting').value = data.settings.fastingWindow;
+    $('#setSleep').value = data.settings.sleepGoal;
     const day = challengeDay(todayKey());
     $('#settingsHint').textContent =
       (day >= 1 && day <= data.settings.challengeDays)
@@ -971,6 +1038,7 @@
       'Datum', 'Challenge-Tag', 'Gewicht (kg)', 'Wasser (ml)', 'Wasser-Ziel (ml)',
       'Kalorien (kcal)', 'Kalorien-Ziel (kcal)', 'Kalorienziel eingehalten',
       'Essensfenster (h)', `Fasten-Ziel eingehalten (≤ ${S.fastingWindow} h)`,
+      `Schlaf ≥ ${S.sleepGoal} h`, 'Keine Süßigkeiten',
       'Training', 'Ergebnis', 'Notiz'
     ]];
     for (const key of keys) {
@@ -991,6 +1059,8 @@
         kcal > 0 ? (kcal <= S.kcalGoal ? 'Ja' : 'Nein') : '',
         fi.known ? Math.round(fi.spanH * 100) / 100 : '',
         fi.known ? (fi.ok ? 'Ja' : 'Nein') : '',
+        day.sleepOk ? 'Ja' : '',
+        day.noSweets ? 'Ja' : '',
         t ? (t.restDay ? 'Ruhetag' : (w ? w.name : t.workoutName || 'Training')) : '',
         t && !t.restDay ? trainingResultText(t) : '',
         t && t.note ? t.note : ''
@@ -999,6 +1069,7 @@
     const ws1 = XLSX.utils.aoa_to_sheet(overview);
     ws1['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 11 }, { wch: 11 }, { wch: 14 },
                     { wch: 14 }, { wch: 17 }, { wch: 20 }, { wch: 15 }, { wch: 24 },
+                    { wch: 13 }, { wch: 15 },
                     { wch: 20 }, { wch: 36 }, { wch: 28 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Tagesübersicht');
 
@@ -1186,6 +1257,18 @@
       renderAll();
     });
 
+    // Tagesziele
+    $('#checkSleep').addEventListener('change', (e) => {
+      const day = getDay(currentKey, true);
+      day.sleepOk = e.target.checked;
+      cleanupDay(currentKey); save(); renderAll();
+    });
+    $('#checkSweets').addEventListener('change', (e) => {
+      const day = getDay(currentKey, true);
+      day.noSweets = e.target.checked;
+      cleanupDay(currentKey); save(); renderAll();
+    });
+
     // Mahlzeiten
     $('#addMealBtn').addEventListener('click', () => {
       const day = getDay(currentKey, true);
@@ -1228,6 +1311,7 @@
       data.settings.kcalGoal = Number($('#setKcal').value) || 2200;
       data.settings.waterGoal = Math.round((Number($('#setWater').value) || 3) * 1000);
       data.settings.fastingWindow = Number($('#setFasting').value) || 6;
+      data.settings.sleepGoal = Number($('#setSleep').value) || 7.5;
       save(); renderAll();
       toast('Einstellungen gespeichert');
     });
