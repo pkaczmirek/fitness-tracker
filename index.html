@@ -68,8 +68,10 @@
         <div class="progress-wrap">
           <div class="progress-bar"><div class="progress-fill kcal" id="kcalFill"></div></div>
           <div class="progress-label" id="kcalLabel"></div>
+          <div class="progress-label" id="fastingLabel"></div>
         </div>
         <div id="mealsContainer"></div>
+        <button class="add-item-btn" id="addMealBtn">+ Mahlzeit hinzufügen</button>
       </div>
 
       <div class="card" id="cardTraining">
@@ -129,6 +131,9 @@
           </label>
           <label>Wasserziel pro Tag (Liter)
             <input type="number" id="setWater" min="0.5" max="10" step="0.1" required>
+          </label>
+          <label>Essensfenster für Fasten-Ziel (Stunden)
+            <input type="number" id="setFasting" min="1" max="24" step="0.5" required>
           </label>
           <button type="submit" class="btn btn-primary">Speichern</button>
           <p class="hint" id="settingsHint"></p>

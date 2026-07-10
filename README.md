@@ -12,8 +12,10 @@ Training, Kalorien pro Mahlzeit, Wasser und Gewicht – mit Excel-Export.
   - Feste Aufgabe auf Zeit
   - Freies Ergebnis (Text)
   - plus **Ruhetag**-Markierung
-- **Kalorien** – pro Mahlzeit (Frühstück/Mittag/Abend/Snacks), mit wiederverwendbarer
+- **Kalorien** – nummerierte Mahlzeiten (1., 2., 3. …) mit Uhrzeit, wiederverwendbarer
   Lebensmittel-Datenbank, Portionen-Multiplikator und Tagesziel-Fortschritt
+- **Fasten-Ziel** – prüft, ob alle Mahlzeiten eines Tages in einem konfigurierbaren
+  Essensfenster (Standard 6 h) lagen; Auswertung im Verlauf und im Excel-Export
 - **Wasser** – Schnellbuttons (+200/300/500 ml), Tagesziel-Fortschritt
 - **Gewicht** – tägliche Eingabe, Verlaufskurve, Differenz zum letzten Wert
 - **Verlauf** – alle Tage im Überblick, antippen zum Nachtragen/Korrigieren

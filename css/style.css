@@ -250,6 +250,18 @@ main { padding: 12px 12px 24px; max-width: 640px; margin: 0 auto; }
 
 .meal-group-head h3 { font-size: 0.9rem; font-weight: 700; color: var(--ink-2); }
 
+.meal-head-right { display: flex; align-items: center; gap: 8px; }
+
+.meal-time {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink-1);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 6px;
+}
+
 .meal-kcal-sum { font-size: 0.8rem; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 
 .item-list { list-style: none; margin-top: 4px; }

@@ -7,12 +7,8 @@
 
   const STORAGE_KEY = 'fitness-tracker:v1';
 
-  const MEAL_TYPES = [
-    ['breakfast', 'Frühstück'],
-    ['lunch', 'Mittagessen'],
-    ['dinner', 'Abendessen'],
-    ['snacks', 'Snacks']
-  ];
+  // Nur noch für die Migration alter Daten (Version 1) benötigt
+  const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
 
   const SCHEME_LABELS = {
     amrap: 'Max. Runden in Zeit',
@@ -72,17 +68,41 @@
     const start = new Date();
     start.setDate(start.getDate() - 38);
     return {
-      version: 1,
+      version: 2,
       settings: {
         challengeStart: toKey(start),
         challengeDays: 90,
         kcalGoal: 2200,
-        waterGoal: 3000
+        waterGoal: 3000,
+        fastingWindow: 6
       },
       workouts: [],
       foods: [],
       days: {}
     };
+  }
+
+  /* Alte Datenstände ins aktuelle Format überführen */
+  function migrate(d) {
+    if (!d.version || d.version < 2) {
+      // v1 → v2: Mahlzeiten von festen Typen (Frühstück …) auf
+      // nummerierte Mahlzeiten mit Uhrzeit umstellen
+      for (const day of Object.values(d.days || {})) {
+        if (day.meals && !Array.isArray(day.meals)) {
+          const arr = [];
+          for (const type of MEAL_TYPES_V1) {
+            const items = day.meals[type];
+            if (items && items.length) arr.push({ id: uid(), time: null, items });
+          }
+          day.meals = arr;
+        } else if (!Array.isArray(day.meals)) {
+          day.meals = [];
+        }
+      }
+      if (d.settings.fastingWindow == null) d.settings.fastingWindow = 6;
+      d.version = 2;
+    }
+    return d;
   }
 
   function load() {
@@ -91,7 +111,15 @@
       if (!raw) return defaultData();
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || !parsed.settings) return defaultData();
-      return Object.assign(defaultData(), parsed);
+      const merged = Object.assign(defaultData(), parsed);
+      merged.settings = Object.assign(defaultData().settings, parsed.settings);
+      const before = parsed.version || 1;
+      const migrated = migrate(merged);
+      // Migration sofort zurückschreiben, nicht erst beim nächsten Speichern
+      if (migrated.version !== before) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      }
+      return migrated;
     } catch (e) {
       console.error('Konnte Daten nicht laden:', e);
       return defaultData();
@@ -104,25 +132,51 @@
 
   function getDay(key, create) {
     if (!data.days[key] && create) {
-      data.days[key] = { weight: null, water: 0, meals: {}, training: null };
+      data.days[key] = { weight: null, water: 0, meals: [], training: null };
     }
-    return data.days[key] || { weight: null, water: 0, meals: {}, training: null };
+    return data.days[key] || { weight: null, water: 0, meals: [], training: null };
   }
 
   function cleanupDay(key) {
     // Leere Tage nicht dauerhaft speichern
     const d = data.days[key];
     if (!d) return;
-    const hasMeals = Object.values(d.meals || {}).some((arr) => arr && arr.length);
+    const hasMeals = (d.meals || []).length > 0;
     if (d.weight == null && !d.water && !hasMeals && !d.training) delete data.days[key];
   }
 
   function dayKcal(day) {
     let sum = 0;
-    for (const arr of Object.values(day.meals || {})) {
-      for (const item of arr || []) sum += Number(item.kcal) || 0;
+    for (const meal of day.meals || []) {
+      for (const item of meal.items || []) sum += Number(item.kcal) || 0;
     }
     return sum;
+  }
+
+  /* Essensfenster eines Tages auswerten (für das Fasten-Ziel).
+     known = alle Mahlzeiten mit Einträgen haben eine Uhrzeit */
+  function fastingInfo(day) {
+    const meals = (day.meals || []).filter((m) => m.items && m.items.length);
+    if (!meals.length) return { hasMeals: false, known: false };
+    const mins = meals
+      .filter((m) => m.time)
+      .map((m) => {
+        const [h, mm] = m.time.split(':').map(Number);
+        return h * 60 + mm;
+      });
+    if (mins.length < meals.length) return { hasMeals: true, known: false };
+    const first = Math.min(...mins);
+    const last = Math.max(...mins);
+    const spanH = (last - first) / 60;
+    const toHM = (v) => `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`;
+    return {
+      hasMeals: true,
+      known: true,
+      spanH,
+      first: toHM(first),
+      last: toHM(last),
+      ok: spanH <= data.settings.fastingWindow
+    };
   }
 
   /* ---------- Zustand ---------- */
@@ -226,16 +280,50 @@
     $('#kcalLabel').textContent = `${fmt(kcal)} / ${fmt(kGoal)} kcal` +
       (kcal > kGoal ? ` – ${fmt(kcal - kGoal)} über dem Ziel` : ` – noch ${fmt(kGoal - kcal)} übrig`);
 
-    // Mahlzeiten
+    // Fasten-Status
+    const fi = fastingInfo(day);
+    const fl = $('#fastingLabel');
+    if (fi.hasMeals && fi.known) {
+      fl.textContent = `Essensfenster: ${fi.first}–${fi.last} Uhr = ${fmt(fi.spanH, 1)} h ` +
+        (fi.ok ? `✓ (Ziel ≤ ${fmt(data.settings.fastingWindow, 1)} h)` : `✗ (Ziel ≤ ${fmt(data.settings.fastingWindow, 1)} h)`);
+    } else if (fi.hasMeals) {
+      fl.textContent = 'Essensfenster: Uhrzeiten ergänzen, um das Fasten-Ziel auszuwerten';
+    } else {
+      fl.textContent = '';
+    }
+
+    // Mahlzeiten (nummeriert, je mit Uhrzeit)
     const mc = $('#mealsContainer');
     mc.innerHTML = '';
-    for (const [type, label] of MEAL_TYPES) {
-      const items = (day.meals && day.meals[type]) || [];
+    const meals = day.meals || [];
+    meals.forEach((meal, idx) => {
+      const items = meal.items || [];
       const sum = items.reduce((s, i) => s + (Number(i.kcal) || 0), 0);
+
+      const timeInput = el('input', {
+        type: 'time', class: 'meal-time', value: meal.time || '',
+        'aria-label': `Uhrzeit ${idx + 1}. Mahlzeit`,
+        onchange: (e) => {
+          meal.time = e.target.value || null;
+          save(); renderAll();
+        }
+      });
+
       const group = el('div', { class: 'meal-group' },
         el('div', { class: 'meal-group-head' },
-          el('h3', null, label),
-          el('span', { class: 'meal-kcal-sum' }, items.length ? `${fmt(sum)} kcal` : '')
+          el('h3', null, `${idx + 1}. Mahlzeit`),
+          el('div', { class: 'meal-head-right' },
+            timeInput,
+            el('span', { class: 'meal-kcal-sum' }, items.length ? `${fmt(sum)} kcal` : ''),
+            el('button', {
+              class: 'item-del', 'aria-label': 'Mahlzeit löschen',
+              onclick: () => {
+                if (items.length && !confirm(`${idx + 1}. Mahlzeit mit ${items.length} Einträgen löschen?`)) return;
+                day.meals = day.meals.filter((m) => m.id !== meal.id);
+                cleanupDay(currentKey); save(); renderAll();
+              }
+            }, '✕')
+          )
         )
       );
       if (items.length) {
@@ -248,7 +336,7 @@
             el('button', {
               class: 'item-del', 'aria-label': 'Eintrag löschen',
               onclick: () => {
-                day.meals[type] = day.meals[type].filter((i) => i.id !== item.id);
+                meal.items = meal.items.filter((i) => i.id !== item.id);
                 cleanupDay(currentKey); save(); renderAll();
               }
             }, '✕')
@@ -258,10 +346,10 @@
       }
       group.append(el('button', {
         class: 'add-item-btn',
-        onclick: () => openMealDialog(type, label)
-      }, `+ ${label} ergänzen`));
+        onclick: () => openMealDialog(meal.id)
+      }, '+ Eintrag ergänzen'));
       mc.append(group);
-    }
+    });
 
     // Training
     renderTrainingCard(day);
@@ -376,7 +464,11 @@
       const day = data.days[key];
       const kcal = dayKcal(day);
       const facts = [];
-      if (kcal) facts.push(`🍽️ ${fmt(kcal)} kcal`);
+      if (kcal) {
+        facts.push(`🍽️ ${fmt(kcal)} kcal ${kcal <= data.settings.kcalGoal ? '✓' : '✗'}`);
+        const fi = fastingInfo(day);
+        if (fi.known) facts.push(`⏱️ ${fmt(fi.spanH, 1)} h ${fi.ok ? '✓' : '✗'}`);
+      }
       if (day.water) facts.push(`💧 ${fmt(day.water / 1000, 1)} L`);
       if (day.weight != null) facts.push(`⚖️ ${fmt(day.weight, 1)} kg`);
       if (day.training) {
@@ -603,6 +695,7 @@
     $('#setDays').value = data.settings.challengeDays;
     $('#setKcal').value = data.settings.kcalGoal;
     $('#setWater').value = data.settings.waterGoal / 1000;
+    $('#setFasting').value = data.settings.fastingWindow;
     const day = challengeDay(todayKey());
     $('#settingsHint').textContent =
       (day >= 1 && day <= data.settings.challengeDays)
@@ -621,11 +714,13 @@
 
   /* ---------- Mahlzeit ---------- */
 
-  let mealTargetType = null;
+  let mealTargetId = null;
 
-  function openMealDialog(type, label) {
-    mealTargetType = type;
-    $('#mealDialogTitle').textContent = `${label} ergänzen`;
+  function openMealDialog(mealId) {
+    mealTargetId = mealId;
+    const day = getDay(currentKey);
+    const idx = (day.meals || []).findIndex((m) => m.id === mealId);
+    $('#mealDialogTitle').textContent = idx >= 0 ? `${idx + 1}. Mahlzeit ergänzen` : 'Eintrag hinzufügen';
     $('#mealSearch').value = '';
     $('#mealName').value = '';
     $('#mealKcal').value = '';
@@ -676,8 +771,9 @@
     if (!name || isNaN(kcalPer)) return;
 
     const day = getDay(currentKey, true);
-    if (!day.meals[mealTargetType]) day.meals[mealTargetType] = [];
-    day.meals[mealTargetType].push({
+    const meal = (day.meals || []).find((m) => m.id === mealTargetId);
+    if (!meal) return;
+    meal.items.push({
       id: uid(), name, qty, kcal: Math.round(kcalPer * qty)
     });
 
@@ -873,21 +969,28 @@
     // Blatt 1: Tagesübersicht
     const overview = [[
       'Datum', 'Challenge-Tag', 'Gewicht (kg)', 'Wasser (ml)', 'Wasser-Ziel (ml)',
-      'Kalorien (kcal)', 'Kalorien-Ziel (kcal)', 'Training', 'Ergebnis', 'Notiz'
+      'Kalorien (kcal)', 'Kalorien-Ziel (kcal)', 'Kalorienziel eingehalten',
+      'Essensfenster (h)', `Fasten-Ziel eingehalten (≤ ${S.fastingWindow} h)`,
+      'Training', 'Ergebnis', 'Notiz'
     ]];
     for (const key of keys) {
       const day = data.days[key];
       const cd = challengeDay(key);
       const t = day.training;
       const w = t && !t.restDay ? workoutById(t.workoutId) : null;
+      const kcal = dayKcal(day);
+      const fi = fastingInfo(day);
       overview.push([
         key,
         cd >= 1 && cd <= S.challengeDays ? cd : '',
         day.weight != null ? day.weight : '',
         day.water || 0,
         S.waterGoal,
-        dayKcal(day),
+        kcal,
         S.kcalGoal,
+        kcal > 0 ? (kcal <= S.kcalGoal ? 'Ja' : 'Nein') : '',
+        fi.known ? Math.round(fi.spanH * 100) / 100 : '',
+        fi.known ? (fi.ok ? 'Ja' : 'Nein') : '',
         t ? (t.restDay ? 'Ruhetag' : (w ? w.name : t.workoutName || 'Training')) : '',
         t && !t.restDay ? trainingResultText(t) : '',
         t && t.note ? t.note : ''
@@ -895,27 +998,29 @@
     }
     const ws1 = XLSX.utils.aoa_to_sheet(overview);
     ws1['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 11 }, { wch: 11 }, { wch: 14 },
-                    { wch: 14 }, { wch: 17 }, { wch: 20 }, { wch: 36 }, { wch: 28 }];
+                    { wch: 14 }, { wch: 17 }, { wch: 20 }, { wch: 15 }, { wch: 24 },
+                    { wch: 20 }, { wch: 36 }, { wch: 28 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Tagesübersicht');
 
     // Blatt 2: Mahlzeiten
-    const meals = [['Datum', 'Challenge-Tag', 'Mahlzeit', 'Eintrag', 'Portionen', 'kcal']];
-    const mealLabel = Object.fromEntries(MEAL_TYPES);
+    const meals = [['Datum', 'Challenge-Tag', 'Mahlzeit', 'Uhrzeit', 'Eintrag', 'Portionen', 'kcal']];
     for (const key of keys) {
       const day = data.days[key];
       const cd = challengeDay(key);
-      for (const [type] of MEAL_TYPES) {
-        for (const item of (day.meals && day.meals[type]) || []) {
+      (day.meals || []).forEach((meal, idx) => {
+        for (const item of meal.items || []) {
           meals.push([
             key,
             cd >= 1 && cd <= S.challengeDays ? cd : '',
-            mealLabel[type], item.name, item.qty || 1, item.kcal
+            `${idx + 1}. Mahlzeit`,
+            meal.time || '',
+            item.name, item.qty || 1, item.kcal
           ]);
         }
-      }
+      });
     }
     const ws2 = XLSX.utils.aoa_to_sheet(meals);
-    ws2['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 12 }, { wch: 34 }, { wch: 9 }, { wch: 8 }];
+    ws2['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 34 }, { wch: 9 }, { wch: 8 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Mahlzeiten');
 
     // Blatt 3: Trainings (mit Runden-Details)
@@ -1081,7 +1186,24 @@
       renderAll();
     });
 
-    // Mahlzeiten-Dialog
+    // Mahlzeiten
+    $('#addMealBtn').addEventListener('click', () => {
+      const day = getDay(currentKey, true);
+      if (!Array.isArray(day.meals)) day.meals = [];
+      const now = new Date();
+      const isToday = currentKey === todayKey();
+      const meal = {
+        id: uid(),
+        // Bei heutigen Einträgen die aktuelle Uhrzeit vorschlagen
+        time: isToday
+          ? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+          : null,
+        items: []
+      };
+      day.meals.push(meal);
+      save(); renderAll();
+      openMealDialog(meal.id);
+    });
     $('#mealForm').addEventListener('submit', submitMeal);
     $('#mealSearch').addEventListener('input', (e) => renderMealSuggestions(e.target.value));
     $('#mealKcal').addEventListener('input', updateMealTotal);
@@ -1105,6 +1227,7 @@
       data.settings.challengeDays = Number($('#setDays').value) || 90;
       data.settings.kcalGoal = Number($('#setKcal').value) || 2200;
       data.settings.waterGoal = Math.round((Number($('#setWater').value) || 3) * 1000);
+      data.settings.fastingWindow = Number($('#setFasting').value) || 6;
       save(); renderAll();
       toast('Einstellungen gespeichert');
     });
