@@ -73,7 +73,9 @@
         kcalGoal: 2200,
         waterGoal: 3000,
         fastingWindow: 6,
-        sleepGoal: 7.5
+        sleepGoal: 7.5,
+        // Ab wann die einzelnen Erfolgsquoten zählen (null = von Anfang an)
+        trackFrom: { training: null, kcal: null, water: null, fasting: null, sleep: null, sweets: null }
       },
       workouts: [],
       foods: [],
@@ -112,6 +114,10 @@
       if (!parsed || typeof parsed !== 'object' || !parsed.settings) return defaultData();
       const merged = Object.assign(defaultData(), parsed);
       merged.settings = Object.assign(defaultData().settings, parsed.settings);
+      merged.settings.trackFrom = Object.assign(
+        defaultData().settings.trackFrom,
+        (parsed.settings && parsed.settings.trackFrom) || {}
+      );
       const before = parsed.version || 1;
       const migrated = migrate(merged);
       // Migration sofort zurückschreiben, nicht erst beim nächsten Speichern
@@ -179,9 +185,15 @@
     };
   }
 
+  /* Tages-Schlüssel, die für einen Parameter zählen (trackFrom-Filter) */
+  function countedKeys(param) {
+    const from = (data.settings.trackFrom || {})[param];
+    return Object.keys(data.days).filter((k) => !from || k >= from).sort();
+  }
+
   /* Schlaf-Ziel: an wie vielen der erfassten Tage erreicht */
   function sleepStats() {
-    const keys = Object.keys(data.days);
+    const keys = countedKeys('sleep');
     const achieved = keys.filter((k) => data.days[k].sleepOk).length;
     return { achieved, total: keys.length };
   }
@@ -189,22 +201,67 @@
   /* Süßigkeiten-Streak: Tage am Stück (heute zählt erst, wenn angehakt;
      ein noch nicht angehakter heutiger Tag bricht den Streak nicht) */
   function sweetsStreak() {
+    const from = (data.settings.trackFrom || {}).sweets;
+    const ok = (k) => (!from || k >= from) && data.days[k] && data.days[k].noSweets;
     let k = todayKey();
     let streak = 0;
-    if (!(data.days[k] && data.days[k].noSweets)) k = addDays(k, -1);
-    while (data.days[k] && data.days[k].noSweets) {
+    if (!ok(k)) k = addDays(k, -1);
+    while (ok(k)) {
       streak++;
       k = addDays(k, -1);
     }
     // Rekord: längste Serie aufeinanderfolgender Kalendertage
     let best = 0, run = 0, prev = null;
-    for (const key of Object.keys(data.days).sort()) {
+    for (const key of countedKeys('sweets')) {
       if (!data.days[key].noSweets) continue;
       run = (prev && addDays(prev, 1) === key) ? run + 1 : 1;
       best = Math.max(best, run);
       prev = key;
     }
     return { streak, best };
+  }
+
+  /* Quote „erreicht an X von Y Tagen" für kcal / Wasser / Fasten */
+  function ratioStats(param) {
+    let total = 0, achieved = 0;
+    for (const k of countedKeys(param)) {
+      const day = data.days[k];
+      if (param === 'kcal') {
+        const kc = dayKcal(day);
+        if (kc > 0) { total++; if (kc <= data.settings.kcalGoal) achieved++; }
+      } else if (param === 'water') {
+        if (day.water > 0) { total++; if (day.water >= data.settings.waterGoal) achieved++; }
+      } else if (param === 'fasting') {
+        const fi = fastingInfo(day);
+        if (fi.known) { total++; if (fi.ok) achieved++; }
+      }
+    }
+    return { achieved, total };
+  }
+
+  /* Trainingsquote: Training oder Ruhetag an X von Y Kalendertagen */
+  function trainingStats() {
+    const start = (data.settings.trackFrom || {}).training || data.settings.challengeStart;
+    const today = todayKey();
+    let calDays = Math.floor((fromKey(today) - fromKey(start)) / 86400000) + 1;
+    if (calDays < 0) calDays = 0;
+    let trained = 0, rests = 0;
+    for (const k of Object.keys(data.days)) {
+      if (k < start || k > today) continue;
+      const t = data.days[k].training;
+      if (t) (t.restDay ? rests++ : trained++);
+    }
+    return { trained, rests, calDays, start };
+  }
+
+  /* Letztes erfasstes Ergebnis eines Workouts vor einem Datum */
+  function lastTrainingResult(workoutId, beforeKey) {
+    const keys = Object.keys(data.days).filter((k) => k < beforeKey).sort().reverse();
+    for (const k of keys) {
+      const t = data.days[k].training;
+      if (t && !t.restDay && t.workoutId === workoutId) return { key: k, t };
+    }
+    return null;
   }
 
   /* ---------- Zustand ---------- */
@@ -314,17 +371,8 @@
     $('#kcalLabel').textContent = `${fmt(kcal)} / ${fmt(kGoal)} kcal` +
       (kcal > kGoal ? ` – ${fmt(kcal - kGoal)} über dem Ziel` : ` – noch ${fmt(kGoal - kcal)} übrig`);
 
-    // Fasten-Status
-    const fi = fastingInfo(day);
-    const fl = $('#fastingLabel');
-    if (fi.hasMeals && fi.known) {
-      fl.textContent = `Essensfenster: ${fi.first}–${fi.last} Uhr = ${fmt(fi.spanH, 1)} h ` +
-        (fi.ok ? `✓ (Ziel ≤ ${fmt(data.settings.fastingWindow, 1)} h)` : `✗ (Ziel ≤ ${fmt(data.settings.fastingWindow, 1)} h)`);
-    } else if (fi.hasMeals) {
-      fl.textContent = 'Essensfenster: Uhrzeiten ergänzen, um das Fasten-Ziel auszuwerten';
-    } else {
-      fl.textContent = '';
-    }
+    // Fasten-Status + Countdown
+    updateFastingDisplay(day);
 
     // Mahlzeiten (nummeriert, je mit Uhrzeit)
     const mc = $('#mealsContainer');
@@ -385,8 +433,48 @@
       mc.append(group);
     });
 
+    // „Wie gestern": nur anbieten, wenn der Tag leer ist und der Vortag Mahlzeiten hat
+    const prevDay = data.days[addDays(currentKey, -1)];
+    const prevHasMeals = prevDay && (prevDay.meals || []).some((m) => m.items && m.items.length);
+    $('#copyMealsBtn').hidden = !(meals.length === 0 && prevHasMeals);
+
     // Training
     renderTrainingCard(day);
+  }
+
+  function updateFastingDisplay(day) {
+    const fi = fastingInfo(day);
+    const fl = $('#fastingLabel');
+    const goalTxt = fmt(data.settings.fastingWindow, 1);
+    if (fi.hasMeals && fi.known) {
+      fl.textContent = `Essensfenster: ${fi.first}–${fi.last} Uhr = ${fmt(fi.spanH, 1)} h ` +
+        (fi.ok ? `✓ (Ziel ≤ ${goalTxt} h)` : `✗ (Ziel ≤ ${goalTxt} h)`);
+    } else if (fi.hasMeals) {
+      fl.textContent = 'Essensfenster: Uhrzeiten ergänzen, um das Fasten-Ziel auszuwerten';
+    } else {
+      fl.textContent = '';
+    }
+
+    // Countdown nur für den heutigen Tag
+    const fc = $('#fastingCountdown');
+    fc.textContent = '';
+    if (currentKey !== todayKey()) return;
+    const timed = (day.meals || []).filter((m) => m.items && m.items.length && m.time);
+    if (!timed.length || (fi.known && !fi.ok)) return;
+    const mins = timed.map((m) => {
+      const [h, mm] = m.time.split(':').map(Number);
+      return h * 60 + mm;
+    });
+    const close = Math.min(...mins) + Math.round(data.settings.fastingWindow * 60);
+    const now = new Date();
+    const nowM = now.getHours() * 60 + now.getMinutes();
+    const hm = (v) => `${String(Math.floor((v % 1440) / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`;
+    if (nowM <= close) {
+      const rest = close - nowM;
+      fc.textContent = `⏳ Fenster noch offen bis ${hm(close)} Uhr (${Math.floor(rest / 60)}:${String(rest % 60).padStart(2, '0')} h übrig)`;
+    } else {
+      fc.textContent = `🔒 Fenster geschlossen (war offen bis ${hm(close)} Uhr)`;
+    }
   }
 
   function lastWeightBefore(key) {
@@ -484,38 +572,76 @@
 
   /* ---------- Verlauf ---------- */
 
-  function renderHistory() {
-    // Erfolge: Schlaf-Quote und Süßigkeiten-Streak
-    const sc = $('#statsContainer');
-    sc.innerHTML = '';
-    const sleep = sleepStats();
-    const sweets = sweetsStreak();
-    const goalTxt = data.settings.sleepGoal.toLocaleString('de-DE');
-    sc.append(
-      el('div', { class: 'stat-row' },
-        el('span', { class: 'stat-icon' }, '😴'),
-        el('div', { class: 'stat-main' },
-          el('div', { class: 'stat-value' },
-            sleep.total ? `${fmt((sleep.achieved / sleep.total) * 100)} %` : '–'),
-          el('div', { class: 'stat-label' },
-            sleep.total
-              ? `Schlaf ≥ ${goalTxt} h: ${sleep.achieved} von ${sleep.total} erfassten Tagen`
-              : `Schlaf ≥ ${goalTxt} h: noch keine Tage erfasst`)
-        )
-      ),
-      el('div', { class: 'stat-row' },
-        el('span', { class: 'stat-icon' }, '🍬'),
-        el('div', { class: 'stat-main' },
-          el('div', { class: 'stat-value' },
-            `${sweets.streak} ${sweets.streak === 1 ? 'Tag' : 'Tage'}`),
-          el('div', { class: 'stat-label' },
-            'am Stück ohne Süßigkeiten' +
-            (sweets.best > sweets.streak ? ` · Rekord: ${sweets.best}` : ''))
-        )
+  function statRow(icon, value, label) {
+    return el('div', { class: 'stat-row' },
+      el('span', { class: 'stat-icon' }, icon),
+      el('div', { class: 'stat-main' },
+        el('div', { class: 'stat-value' }, value),
+        el('div', { class: 'stat-label' }, label)
       )
     );
+  }
+
+  function formatDateShort(key) {
+    return fromKey(key).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  function sinceSuffix(param) {
+    const from = (data.settings.trackFrom || {})[param];
+    return from ? ` · zählt ab ${formatDateShort(from)}` : '';
+  }
+
+  function renderHistory() {
+    renderReport();
+
+    // Erfolge
+    const sc = $('#statsContainer');
+    sc.innerHTML = '';
+
+    const tr = trainingStats();
+    const done = tr.trained + tr.rests;
+    sc.append(statRow('🏋️',
+      tr.calDays ? `${fmt((done / tr.calDays) * 100)} %` : '–',
+      `${tr.trained} Trainings · ${tr.rests} Ruhetage · ${tr.calDays} Tage seit ${formatDateShort(tr.start)}`));
+
+    const kc = ratioStats('kcal');
+    sc.append(statRow('🍽️',
+      kc.total ? `${fmt((kc.achieved / kc.total) * 100)} %` : '–',
+      kc.total
+        ? `Kalorienziel an ${kc.achieved} von ${kc.total} erfassten Tagen${sinceSuffix('kcal')}`
+        : 'Kalorienziel: noch keine Tage erfasst'));
+
+    const fa = ratioStats('fasting');
+    sc.append(statRow('⏱️',
+      fa.total ? `${fmt((fa.achieved / fa.total) * 100)} %` : '–',
+      fa.total
+        ? `Fasten-Ziel an ${fa.achieved} von ${fa.total} ausgewerteten Tagen${sinceSuffix('fasting')}`
+        : 'Fasten-Ziel: noch keine Tage mit Uhrzeiten'));
+
+    const wa = ratioStats('water');
+    sc.append(statRow('💧',
+      wa.total ? `${fmt((wa.achieved / wa.total) * 100)} %` : '–',
+      wa.total
+        ? `Wasserziel an ${wa.achieved} von ${wa.total} erfassten Tagen${sinceSuffix('water')}`
+        : 'Wasserziel: noch keine Tage erfasst'));
+
+    const sleep = sleepStats();
+    const goalTxt = data.settings.sleepGoal.toLocaleString('de-DE');
+    sc.append(statRow('😴',
+      sleep.total ? `${fmt((sleep.achieved / sleep.total) * 100)} %` : '–',
+      sleep.total
+        ? `Schlaf ≥ ${goalTxt} h an ${sleep.achieved} von ${sleep.total} erfassten Tagen${sinceSuffix('sleep')}`
+        : `Schlaf ≥ ${goalTxt} h: noch keine Tage erfasst`));
+
+    const sweets = sweetsStreak();
+    sc.append(statRow('🍬',
+      `${sweets.streak} ${sweets.streak === 1 ? 'Tag' : 'Tage'}`,
+      'am Stück ohne Süßigkeiten' +
+      (sweets.best > sweets.streak ? ` · Rekord: ${sweets.best}` : '') +
+      sinceSuffix('sweets')));
 
     renderWeightChart();
+    renderTrainingChart();
 
     const list = $('#historyList');
     list.innerHTML = '';
@@ -557,45 +683,72 @@
     }
   }
 
-  /* Gewichts-Diagramm: eine Serie, Linie + Punkte, Hover-Tooltip */
-  function renderWeightChart() {
-    const wrap = $('#weightChart');
-    wrap.innerHTML = '';
+  /* Abschlussbericht nach Ende der Challenge */
+  function renderReport() {
+    const card = $('#reportCard');
+    const S = data.settings;
+    if (challengeDay(todayKey()) <= S.challengeDays) { card.hidden = true; return; }
+    card.hidden = false;
+    const box = $('#reportContent');
+    box.innerHTML = '';
+    const startKey = S.challengeStart;
+    const endKey = addDays(startKey, S.challengeDays - 1);
+    const keys = Object.keys(data.days).filter((k) => k >= startKey && k <= endKey).sort();
 
-    const entries = Object.keys(data.days)
-      .filter((k) => data.days[k].weight != null)
-      .sort()
-      .map((k) => ({ key: k, weight: data.days[k].weight }))
-      .slice(-60);
+    box.append(el('p', { class: 'hint' },
+      `${S.challengeDays} Tage vom ${formatDateShort(startKey)} bis ${formatDateShort(endKey)} – stark durchgezogen! 💪`));
 
-    if (entries.length < 2) {
-      wrap.append(el('p', { class: 'empty-note' },
-        entries.length === 1
-          ? `Bisher ein Messwert: ${fmt(entries[0].weight, 1)} kg. Ab zwei Werten gibt es hier eine Kurve.`
-          : 'Trage dein Gewicht ein, um hier den Verlauf zu sehen.'));
-      return;
+    const weights = keys.filter((k) => data.days[k].weight != null);
+    if (weights.length >= 2) {
+      const a = data.days[weights[0]].weight;
+      const b = data.days[weights[weights.length - 1]].weight;
+      const diff = b - a;
+      box.append(statRow('⚖️', `${diff > 0 ? '+' : ''}${fmt(diff, 1)} kg`,
+        `von ${fmt(a, 1)} kg auf ${fmt(b, 1)} kg`));
     }
+
+    let tr = 0, ru = 0;
+    for (const k of keys) {
+      const t = data.days[k].training;
+      if (t) (t.restDay ? ru++ : tr++);
+    }
+    box.append(statRow('🏋️', `${tr} Trainings`, `dazu ${ru} Ruhetage in ${S.challengeDays} Tagen`));
+
+    let best = 0, run = 0, prev = null;
+    for (const k of keys) {
+      if (!data.days[k].noSweets) continue;
+      run = (prev && addDays(prev, 1) === k) ? run + 1 : 1;
+      best = Math.max(best, run);
+      prev = k;
+    }
+    if (best) box.append(statRow('🍬', `${best} ${best === 1 ? 'Tag' : 'Tage'}`, 'längste Serie ohne Süßigkeiten'));
+  }
+
+  /* Generischer Linien-Chart: mehrere Serien, Hover-Tooltip, optionale Legende */
+  function drawLineChart(wrap, cfg) {
+    const allKeys = [...new Set(cfg.series.flatMap((s) => s.entries.map((e) => e.key)))].sort();
+    if (allKeys.length < 2) return;
 
     const W = 640, H = 260;
     const PAD = { l: 44, r: 16, t: 16, b: 30 };
     const iw = W - PAD.l - PAD.r;
     const ih = H - PAD.t - PAD.b;
 
-    const t0 = fromKey(entries[0].key).getTime();
-    const t1 = fromKey(entries[entries.length - 1].key).getTime();
+    const t0 = fromKey(allKeys[0]).getTime();
+    const t1 = fromKey(allKeys[allKeys.length - 1]).getTime();
     const span = Math.max(t1 - t0, 1);
-    const weights = entries.map((e) => e.weight);
-    let yMin = Math.min(...weights), yMax = Math.max(...weights);
-    const pad = Math.max((yMax - yMin) * 0.15, 0.5);
-    yMin -= pad; yMax += pad;
+    const values = cfg.series.flatMap((s) => s.entries.map((e) => e.value));
+    let yMin = Math.min(...values), yMax = Math.max(...values);
+    const padY = Math.max((yMax - yMin) * 0.15, cfg.minPad != null ? cfg.minPad : 0.5);
+    yMin -= padY; yMax += padY;
 
-    const x = (e) => PAD.l + ((fromKey(e.key).getTime() - t0) / span) * iw;
-    const y = (v) => PAD.t + (1 - (v - yMin) / (yMax - yMin)) * ih;
+    const xOf = (key) => PAD.l + ((fromKey(key).getTime() - t0) / span) * iw;
+    const yOf = (v) => PAD.t + (1 - (v - yMin) / (yMax - yMin)) * ih;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', 'Gewichtsverlauf in Kilogramm');
+    if (cfg.ariaLabel) svg.setAttribute('aria-label', cfg.ariaLabel);
 
     const S = (tag, attrs) => {
       const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -607,7 +760,7 @@
     const steps = 4;
     for (let i = 0; i <= steps; i++) {
       const v = yMin + ((yMax - yMin) * i) / steps;
-      const gy = y(v);
+      const gy = yOf(v);
       svg.append(S('line', {
         x1: PAD.l, x2: W - PAD.r, y1: gy, y2: gy,
         stroke: 'var(--grid)', 'stroke-width': 1
@@ -617,48 +770,57 @@
         fill: 'var(--ink-muted)', 'font-size': 11,
         style: 'font-variant-numeric: tabular-nums'
       });
-      label.textContent = fmt(v, 1);
+      label.textContent = fmt(v, cfg.digits);
       svg.append(label);
     }
 
     // X-Beschriftung: erster & letzter Tag
-    for (const e of [entries[0], entries[entries.length - 1]]) {
+    for (const k of [allKeys[0], allKeys[allKeys.length - 1]]) {
       const label = S('text', {
-        x: x(e), y: H - 8,
-        'text-anchor': e === entries[0] ? 'start' : 'end',
+        x: xOf(k), y: H - 8,
+        'text-anchor': k === allKeys[0] ? 'start' : 'end',
         fill: 'var(--ink-muted)', 'font-size': 11
       });
-      label.textContent = fromKey(e.key).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+      label.textContent = fromKey(k).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
       svg.append(label);
     }
 
-    // Linie
-    const dPath = entries.map((e, i) => `${i ? 'L' : 'M'}${x(e).toFixed(1)},${y(e.weight).toFixed(1)}`).join('');
-    svg.append(S('path', {
-      d: dPath, fill: 'none', stroke: 'var(--series-1)',
-      'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
-    }));
-
-    // Punkte (mit Surface-Ring)
-    for (const e of entries) {
-      svg.append(S('circle', {
-        cx: x(e), cy: y(e.weight), r: 4,
-        fill: 'var(--series-1)', stroke: 'var(--surface-1)', 'stroke-width': 2
+    // Linien
+    for (const s of cfg.series) {
+      if (s.entries.length < 2) continue;
+      const dPath = s.entries.map((e, i) => `${i ? 'L' : 'M'}${xOf(e.key).toFixed(1)},${yOf(e.value).toFixed(1)}`).join('');
+      svg.append(S('path', {
+        d: dPath, fill: 'none', stroke: s.color,
+        'stroke-width': s.width, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
       }));
     }
 
-    // Letzten Wert direkt beschriften
-    const last = entries[entries.length - 1];
-    const lastLabel = S('text', {
-      x: Math.min(x(last), W - PAD.r) - 2, y: y(last.weight) - 10,
-      'text-anchor': 'end', fill: 'var(--ink-2)',
-      'font-size': 12, 'font-weight': 700,
-      style: 'font-variant-numeric: tabular-nums'
-    });
-    lastLabel.textContent = `${fmt(last.weight, 1)} kg`;
-    svg.append(lastLabel);
+    // Punkte (mit Surface-Ring)
+    for (const s of cfg.series) {
+      if (!s.r) continue;
+      for (const e of s.entries) {
+        svg.append(S('circle', {
+          cx: xOf(e.key), cy: yOf(e.value), r: s.r,
+          fill: s.color, stroke: 'var(--surface-1)', 'stroke-width': 2
+        }));
+      }
+    }
 
-    // Hover/Touch: Fadenkreuz + Tooltip am nächsten Punkt
+    // Letzten Wert der markierten Serie direkt beschriften
+    const lblSeries = cfg.series.find((s) => s.labelLast);
+    if (lblSeries && lblSeries.entries.length) {
+      const last = lblSeries.entries[lblSeries.entries.length - 1];
+      const t = S('text', {
+        x: Math.min(xOf(last.key), W - PAD.r) - 2, y: yOf(last.value) - 10,
+        'text-anchor': 'end', fill: 'var(--ink-2)',
+        'font-size': 12, 'font-weight': 700,
+        style: 'font-variant-numeric: tabular-nums'
+      });
+      t.textContent = `${fmt(last.value, cfg.digits)}${cfg.unit ? ' ' + cfg.unit : ''}`;
+      svg.append(t);
+    }
+
+    // Hover/Touch: Fadenkreuz + Tooltip am nächsten Datum
     const crosshair = S('line', {
       x1: 0, x2: 0, y1: PAD.t, y2: H - PAD.b,
       stroke: 'var(--baseline)', 'stroke-width': 1, visibility: 'hidden'
@@ -667,24 +829,41 @@
 
     const tooltip = el('div', { class: 'chart-tooltip' });
     tooltip.style.display = 'none';
+
+    // Legende nur bei mehreren Serien
+    if (cfg.series.length > 1) {
+      wrap.append(el('div', { class: 'chart-legend' },
+        ...cfg.series.map((s) => el('span', { class: 'legend-item' },
+          el('span', { class: 'chip', style: `background:${s.color}` }), s.name))));
+    }
     wrap.append(svg, tooltip);
 
     function onMove(clientX) {
       const rect = svg.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
       const px = ((clientX - rect.left) / rect.width) * W;
-      let best = entries[0], bd = Infinity;
-      for (const e of entries) {
-        const d = Math.abs(x(e) - px);
-        if (d < bd) { bd = d; best = e; }
+      let best = allKeys[0], bd = Infinity;
+      for (const k of allKeys) {
+        const d = Math.abs(xOf(k) - px);
+        if (d < bd) { bd = d; best = k; }
       }
-      const bx = x(best);
+      const parts = [];
+      let anchorY = PAD.t;
+      for (const s of cfg.series) {
+        const e = s.entries.find((x) => x.key === best);
+        if (e) {
+          parts.push(`${s.tipLabel || ''}${fmt(e.value, cfg.digits)}${cfg.unit ? ' ' + cfg.unit : ''}`);
+          anchorY = yOf(e.value);
+        }
+      }
+      const bx = xOf(best);
       crosshair.setAttribute('x1', bx);
       crosshair.setAttribute('x2', bx);
       crosshair.setAttribute('visibility', 'visible');
       tooltip.style.display = 'block';
-      tooltip.style.left = `${(bx / W) * rect.width}px`;
-      tooltip.style.top = `${(y(best.weight) / H) * rect.height}px`;
-      tooltip.textContent = `${formatDateLong(best.key)} · ${fmt(best.weight, 1)} kg`;
+      tooltip.style.left = `${(rect.left - wrapRect.left) + (bx / W) * rect.width}px`;
+      tooltip.style.top = `${(rect.top - wrapRect.top) + (anchorY / H) * rect.height}px`;
+      tooltip.textContent = `${formatDateLong(best)} · ${parts.join(' · ')}`;
     }
     function onLeave() {
       crosshair.setAttribute('visibility', 'hidden');
@@ -695,6 +874,95 @@
     svg.addEventListener('touchstart', (ev) => onMove(ev.touches[0].clientX), { passive: true });
     svg.addEventListener('touchmove', (ev) => onMove(ev.touches[0].clientX), { passive: true });
     svg.addEventListener('touchend', onLeave);
+  }
+
+  /* Gewichtsdiagramm: Tageswerte + rollierender 7-Tage-Durchschnitt */
+  function renderWeightChart() {
+    const wrap = $('#weightChart');
+    wrap.innerHTML = '';
+
+    const entries = Object.keys(data.days)
+      .filter((k) => data.days[k].weight != null)
+      .sort()
+      .map((k) => ({ key: k, value: data.days[k].weight }))
+      .slice(-60);
+
+    if (entries.length < 2) {
+      wrap.append(el('p', { class: 'empty-note' },
+        entries.length === 1
+          ? `Bisher ein Messwert: ${fmt(entries[0].value, 1)} kg. Ab zwei Werten gibt es hier eine Kurve.`
+          : 'Trage dein Gewicht ein, um hier den Verlauf zu sehen.'));
+      return;
+    }
+
+    const trend = entries.map((e) => {
+      const end = fromKey(e.key).getTime();
+      const startT = end - 6 * 86400000;
+      const win = entries.filter((x) => {
+        const t = fromKey(x.key).getTime();
+        return t >= startT && t <= end;
+      });
+      return { key: e.key, value: win.reduce((s, x) => s + x.value, 0) / win.length };
+    });
+
+    drawLineChart(wrap, {
+      unit: 'kg', digits: 1, ariaLabel: 'Gewichtsverlauf in Kilogramm',
+      series: [
+        { name: 'Tageswert', color: 'var(--series-1-soft)', width: 1.5, r: 3.5, entries, labelLast: true },
+        { name: '7-Tage-Schnitt', color: 'var(--series-1)', width: 2.5, r: 0, entries: trend, tipLabel: 'Ø ' }
+      ]
+    });
+  }
+
+  /* Trainingsfortschritt: Ergebnis-Verlauf pro Workout */
+  let trainChartWorkoutId = null;
+
+  function trainingChartEntries(w) {
+    const entries = [];
+    for (const k of Object.keys(data.days).sort()) {
+      const t = data.days[k].training;
+      if (!t || t.restDay || t.workoutId !== w.id) continue;
+      let v = null;
+      if (w.scheme === 'amrap') v = t.rounds != null ? Number(t.rounds) : null;
+      else if (w.scheme === 'fixedRounds') v = (t.repsPerRound || []).reduce((s, r) => s + (Number(r) || 0), 0);
+      else if (w.scheme === 'time') v = (Number(t.timeMin) || 0) + (Number(t.timeSec) || 0) / 60;
+      if (v != null && !isNaN(v)) entries.push({ key: k, value: v });
+    }
+    return entries;
+  }
+
+  function renderTrainingChart() {
+    const sel = $('#trainChartSelect');
+    const wrap = $('#trainChart');
+    wrap.innerHTML = '';
+    const chartable = data.workouts.filter((w) => w.scheme !== 'free' && trainingChartEntries(w).length >= 1);
+    sel.innerHTML = '';
+    sel.hidden = !chartable.length;
+    if (!chartable.length) {
+      wrap.append(el('p', { class: 'empty-note' },
+        'Sobald du Trainings erfasst hast, siehst du hier deinen Fortschritt pro Workout.'));
+      return;
+    }
+    for (const w of chartable) sel.append(el('option', { value: w.id }, w.name));
+    if (!chartable.some((w) => w.id === trainChartWorkoutId)) trainChartWorkoutId = chartable[0].id;
+    sel.value = trainChartWorkoutId;
+
+    const w = workoutById(trainChartWorkoutId);
+    const entries = trainingChartEntries(w);
+    if (entries.length < 2) {
+      wrap.append(el('p', { class: 'empty-note' },
+        `Bisher ein Ergebnis für „${w.name}" – ab zwei Einträgen gibt es hier eine Kurve.`));
+      return;
+    }
+    const unit = w.scheme === 'amrap' ? 'Runden' : w.scheme === 'fixedRounds' ? 'Wdh.' : 'min';
+    drawLineChart(wrap, {
+      unit, digits: w.scheme === 'time' ? 1 : 0, minPad: 1,
+      ariaLabel: `Trainingsfortschritt ${w.name}`,
+      series: [{ name: w.name, color: 'var(--series-1)', width: 2, r: 4, entries, labelLast: true }]
+    });
+    if (w.scheme === 'time') {
+      wrap.append(el('p', { class: 'hint' }, 'Bei Trainings auf Zeit ist ein niedrigerer Wert besser.'));
+    }
   }
 
   /* ---------- Verwalten ---------- */
@@ -763,6 +1031,13 @@
     $('#setWater').value = data.settings.waterGoal / 1000;
     $('#setFasting').value = data.settings.fastingWindow;
     $('#setSleep').value = data.settings.sleepGoal;
+    const tf = data.settings.trackFrom || {};
+    $('#tfTraining').value = tf.training || '';
+    $('#tfKcal').value = tf.kcal || '';
+    $('#tfWater').value = tf.water || '';
+    $('#tfFasting').value = tf.fasting || '';
+    $('#tfSleep').value = tf.sleep || '';
+    $('#tfSweets').value = tf.sweets || '';
     const day = challengeDay(todayKey());
     $('#settingsHint').textContent =
       (day >= 1 && day <= data.settings.challengeDays)
@@ -924,10 +1199,20 @@
     const w = workoutById($('#logWorkout').value);
     const box = $('#logFields');
     box.innerHTML = '';
+    $('#logLastResult').textContent = '';
     if (!w) return;
 
     $('#logWorkoutInfo').textContent =
       workoutSubtitle(w) + (w.note ? ` – ${w.note}` : '');
+
+    // Letztes Ergebnis desselben Workouts als Vergleich anzeigen
+    const last = lastTrainingResult(w.id, currentKey);
+    if (last) {
+      const cd = challengeDay(last.key);
+      const tag = cd >= 1 && cd <= data.settings.challengeDays ? `Tag ${cd}, ` : '';
+      $('#logLastResult').textContent =
+        `💪 Letztes Mal (${tag}${formatDateLong(last.key)}): ${trainingResultText(last.t)}`;
+    }
 
     const use = existing && existing.workoutId === w.id ? existing : null;
 
@@ -1269,6 +1554,22 @@
       cleanupDay(currentKey); save(); renderAll();
     });
 
+    // Mahlzeiten vom Vortag übernehmen
+    $('#copyMealsBtn').addEventListener('click', () => {
+      const prevDay = data.days[addDays(currentKey, -1)];
+      if (!prevDay) return;
+      const day = getDay(currentKey, true);
+      day.meals = (prevDay.meals || [])
+        .filter((m) => m.items && m.items.length)
+        .map((m) => ({
+          id: uid(),
+          time: m.time,
+          items: m.items.map((i) => Object.assign({}, i, { id: uid() }))
+        }));
+      save(); renderAll();
+      toast('Mahlzeiten vom Vortag übernommen');
+    });
+
     // Mahlzeiten
     $('#addMealBtn').addEventListener('click', () => {
       const day = getDay(currentKey, true);
@@ -1316,6 +1617,21 @@
       toast('Einstellungen gespeichert');
     });
 
+    // Auswertungs-Startdaten
+    $('#trackFromForm').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      data.settings.trackFrom = {
+        training: $('#tfTraining').value || null,
+        kcal: $('#tfKcal').value || null,
+        water: $('#tfWater').value || null,
+        fasting: $('#tfFasting').value || null,
+        sleep: $('#tfSleep').value || null,
+        sweets: $('#tfSweets').value || null
+      };
+      save(); renderAll();
+      toast('Auswertungs-Startdaten gespeichert');
+    });
+
     // Export & Backup
     $('#exportExcelBtn').addEventListener('click', exportExcel);
     $('#backupBtn').addEventListener('click', exportBackup);
@@ -1324,6 +1640,19 @@
       if (e.target.files[0]) importBackup(e.target.files[0]);
       e.target.value = '';
     });
+
+    // Trainingsfortschritt: Workout-Auswahl
+    $('#trainChartSelect').addEventListener('change', (e) => {
+      trainChartWorkoutId = e.target.value;
+      renderTrainingChart();
+    });
+
+    // Essensfenster-Countdown minütlich aktualisieren
+    setInterval(() => {
+      if (currentView === 'today' && currentKey === todayKey()) {
+        updateFastingDisplay(getDay(currentKey));
+      }
+    }, 60000);
 
     // Dialog-Abbrechen-Buttons
     document.querySelectorAll('dialog').forEach(wireCloseButtons);

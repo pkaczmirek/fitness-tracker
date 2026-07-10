@@ -83,8 +83,10 @@
           <div class="progress-bar"><div class="progress-fill kcal" id="kcalFill"></div></div>
           <div class="progress-label" id="kcalLabel"></div>
           <div class="progress-label" id="fastingLabel"></div>
+          <div class="progress-label" id="fastingCountdown"></div>
         </div>
         <div id="mealsContainer"></div>
+        <button class="add-item-btn" id="copyMealsBtn" hidden>📋 Mahlzeiten vom Vortag übernehmen</button>
         <button class="add-item-btn" id="addMealBtn">+ Mahlzeit hinzufügen</button>
       </div>
 
@@ -99,6 +101,10 @@
 
     <!-- ===== Verlauf ===== -->
     <section id="view-history" class="view" hidden>
+      <div class="card" id="reportCard" hidden>
+        <div class="card-head"><h2>🎉 Challenge abgeschlossen!</h2></div>
+        <div id="reportContent"></div>
+      </div>
       <div class="card">
         <div class="card-head"><h2>Erfolge</h2></div>
         <div id="statsContainer"></div>
@@ -106,6 +112,13 @@
       <div class="card">
         <div class="card-head"><h2>Gewichtsverlauf</h2></div>
         <div id="weightChart" class="chart-wrap"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Trainingsfortschritt</h2>
+          <select id="trainChartSelect" aria-label="Training wählen"></select>
+        </div>
+        <div id="trainChart" class="chart-wrap"></div>
       </div>
       <div class="card">
         <div class="card-head"><h2>Tage</h2></div>
@@ -158,6 +171,33 @@
           </label>
           <button type="submit" class="btn btn-primary">Speichern</button>
           <p class="hint" id="settingsHint"></p>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>📊 Auswertung zählt ab …</h2></div>
+        <p class="hint">Ab welchem Datum die Erfolgsquoten im Verlauf gerechnet werden.
+          Leer = alle Einträge zählen. Praktisch, wenn du z.&nbsp;B. Trainings rückwirkend
+          einträgst, aber Schlaf und Süßigkeiten erst ab heute bewerten willst.</p>
+        <form id="trackFromForm" class="settings-form">
+          <label>Training
+            <input type="date" id="tfTraining">
+          </label>
+          <label>Kalorien
+            <input type="date" id="tfKcal">
+          </label>
+          <label>Wasser
+            <input type="date" id="tfWater">
+          </label>
+          <label>Fasten (Essensfenster)
+            <input type="date" id="tfFasting">
+          </label>
+          <label>Schlaf
+            <input type="date" id="tfSleep">
+          </label>
+          <label>Süßigkeiten
+            <input type="date" id="tfSweets">
+          </label>
+          <button type="submit" class="btn btn-primary">Speichern</button>
         </form>
       </div>
       <div class="card">
@@ -253,6 +293,7 @@
         <select id="logWorkout"></select>
       </label>
       <p class="hint" id="logWorkoutInfo"></p>
+      <p class="hint" id="logLastResult"></p>
       <div id="logFields"></div>
       <label>Notiz (optional)
         <input type="text" id="logNote" maxlength="200" placeholder="z. B. sehr anstrengend heute">

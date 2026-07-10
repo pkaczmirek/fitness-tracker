@@ -9,6 +9,7 @@
   --baseline: #c3c2b7;
   --border: rgba(11, 11, 11, 0.10);
   --series-1: #2a78d6;   /* Blau – Gewicht/Akzent */
+  --series-1-soft: #86b6ef; /* helleres Blau – Tageswerte hinter dem Trend */
   --water: #2a78d6;      /* Blau – Wasser */
   --kcal: #eb6834;       /* Orange – Kalorien */
   --good: #006300;
@@ -30,6 +31,7 @@
     --baseline: #383835;
     --border: rgba(255, 255, 255, 0.10);
     --series-1: #3987e5;
+    --series-1-soft: #1c5cab;
     --water: #3987e5;
     --kcal: #d95926;
     --good: #0ca30c;
@@ -361,6 +363,33 @@ main { padding: 12px 12px 24px; max-width: 640px; margin: 0 auto; }
 /* ===== Diagramm ===== */
 .chart-wrap { position: relative; }
 .chart-wrap svg { display: block; width: 100%; height: auto; }
+
+.chart-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 0.75rem;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+.legend-item { display: inline-flex; align-items: center; }
+.chart-legend .chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-right: 5px;
+}
+
+.card-head select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  border: 1px solid var(--baseline);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-1);
+  max-width: 55%;
+}
 
 .chart-tooltip {
   position: absolute;
