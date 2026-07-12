@@ -17,6 +17,28 @@
     free: 'Freies Ergebnis'
   };
 
+  /* Ruhetag-Varianten; alle außer "rest" zählen als aktiver Ruhetag.
+     Alte Einträge ohne restType gelten als tatsächlicher Ruhetag. */
+  const REST_TYPES = {
+    steps: { icon: '🚶', label: '10.000 Schritte' },
+    mobility: { icon: '🧘', label: 'Mobilitytraining' },
+    run: { icon: '🏃', label: 'Regenerationslauf' },
+    rest: { icon: '😌', label: 'Tatsächlicher Ruhetag' }
+  };
+
+  function restType(t) {
+    return REST_TYPES[t.restType] ? t.restType : 'rest';
+  }
+
+  function isActiveRest(t) {
+    return !!t && t.restDay && restType(t) !== 'rest';
+  }
+
+  function restLabel(t) {
+    const rt = REST_TYPES[restType(t)];
+    return `${rt.icon} ${rt.label}`;
+  }
+
   /* ---------- Datum-Hilfen (immer lokale Zeitzone!) ---------- */
 
   function toKey(date) {
@@ -245,13 +267,16 @@
     const today = todayKey();
     let calDays = Math.floor((fromKey(today) - fromKey(start)) / 86400000) + 1;
     if (calDays < 0) calDays = 0;
-    let trained = 0, rests = 0;
+    let trained = 0, activeRests = 0, rests = 0;
     for (const k of Object.keys(data.days)) {
       if (k < start || k > today) continue;
       const t = data.days[k].training;
-      if (t) (t.restDay ? rests++ : trained++);
+      if (!t) continue;
+      if (!t.restDay) trained++;
+      else if (isActiveRest(t)) activeRests++;
+      else rests++;
     }
-    return { trained, rests, calDays, start };
+    return { trained, activeRests, rests, calDays, start };
   }
 
   /* Letztes erfasstes Ergebnis eines Workouts vor einem Datum */
@@ -492,7 +517,7 @@
 
   function trainingResultText(t) {
     if (!t) return '';
-    if (t.restDay) return 'Ruhetag';
+    if (t.restDay) return REST_TYPES[restType(t)].label;
     const w = workoutById(t.workoutId);
     const scheme = t.scheme || (w && w.scheme) || 'free';
     if (scheme === 'amrap') {
@@ -520,10 +545,11 @@
     const t = day.training;
 
     if (t && t.restDay) {
-      tc.append(el('div', { class: 'rest-banner' }, '😌 Ruhetag'));
+      tc.append(el('div', { class: 'rest-banner' }, restLabel(t)));
       tc.append(el('div', { class: 'quick-btns' },
-        el('button', { class: 'btn', onclick: () => { day.training = null; cleanupDay(currentKey); save(); renderAll(); } },
-          'Ruhetag entfernen')
+        el('button', { class: 'btn', onclick: () => $('#restDialog').showModal() }, 'Ändern'),
+        el('button', { class: 'btn danger-btn', onclick: () => { day.training = null; cleanupDay(currentKey); save(); renderAll(); } },
+          'Entfernen')
       ));
       return;
     }
@@ -562,10 +588,7 @@
         }
       }, 'Training erfassen'),
       el('button', {
-        class: 'btn', onclick: () => {
-          getDay(currentKey, true).training = { restDay: true };
-          save(); renderAll();
-        }
+        class: 'btn', onclick: () => $('#restDialog').showModal()
       }, 'Ruhetag')
     ));
   }
@@ -599,10 +622,10 @@
     sc.innerHTML = '';
 
     const tr = trainingStats();
-    const done = tr.trained + tr.rests;
+    const done = tr.trained + tr.activeRests + tr.rests;
     sc.append(statRow('🏋️',
       tr.calDays ? `${fmt((done / tr.calDays) * 100)} %` : '–',
-      `${tr.trained} Trainings · ${tr.rests} Ruhetage · ${tr.calDays} Tage seit ${formatDateShort(tr.start)}`));
+      `${tr.trained} Trainings · ${tr.activeRests} aktive Ruhetage · ${tr.rests} Ruhetage · ${tr.calDays} Tage seit ${formatDateShort(tr.start)}`));
 
     const kc = ratioStats('kcal');
     sc.append(statRow('🍽️',
@@ -665,7 +688,7 @@
       if (day.noSweets) facts.push('🍬-frei');
       if (day.training) {
         const w = day.training.restDay ? null : workoutById(day.training.workoutId);
-        facts.push(day.training.restDay ? '😌 Ruhetag' : `🏋️ ${w ? w.name : 'Training'}`);
+        facts.push(day.training.restDay ? restLabel(day.training) : `🏋️ ${w ? w.name : 'Training'}`);
       }
       const cd = challengeDay(key);
       const row = el('button', {
@@ -707,12 +730,16 @@
         `von ${fmt(a, 1)} kg auf ${fmt(b, 1)} kg`));
     }
 
-    let tr = 0, ru = 0;
+    let tr = 0, ar = 0, ru = 0;
     for (const k of keys) {
       const t = data.days[k].training;
-      if (t) (t.restDay ? ru++ : tr++);
+      if (!t) continue;
+      if (!t.restDay) tr++;
+      else if (isActiveRest(t)) ar++;
+      else ru++;
     }
-    box.append(statRow('🏋️', `${tr} Trainings`, `dazu ${ru} Ruhetage in ${S.challengeDays} Tagen`));
+    box.append(statRow('🏋️', `${tr} Trainings`,
+      `dazu ${ar} aktive Ruhetage und ${ru} Ruhetage in ${S.challengeDays} Tagen`));
 
     let best = 0, run = 0, prev = null;
     for (const k of keys) {
@@ -1346,8 +1373,8 @@
         fi.known ? (fi.ok ? 'Ja' : 'Nein') : '',
         day.sleepOk ? 'Ja' : '',
         day.noSweets ? 'Ja' : '',
-        t ? (t.restDay ? 'Ruhetag' : (w ? w.name : t.workoutName || 'Training')) : '',
-        t && !t.restDay ? trainingResultText(t) : '',
+        t ? (t.restDay ? (isActiveRest(t) ? 'Aktiver Ruhetag' : 'Ruhetag') : (w ? w.name : t.workoutName || 'Training')) : '',
+        t ? trainingResultText(t) : '',
         t && t.note ? t.note : ''
       ]);
     }
@@ -1398,9 +1425,9 @@
       const row = [
         key,
         cd >= 1 && cd <= S.challengeDays ? cd : '',
-        t.restDay ? 'Ruhetag' : (w ? w.name : t.workoutName || 'Training'),
+        t.restDay ? (isActiveRest(t) ? 'Aktiver Ruhetag' : 'Ruhetag') : (w ? w.name : t.workoutName || 'Training'),
         t.restDay ? '' : (SCHEME_LABELS[t.scheme || (w && w.scheme)] || ''),
-        t.restDay ? '' : trainingResultText(t)
+        trainingResultText(t)
       ];
       for (let i = 0; i < maxRounds; i++) {
         row.push(t.repsPerRound && t.repsPerRound[i] != null ? t.repsPerRound[i] : '');
@@ -1640,6 +1667,46 @@
       if (e.target.files[0]) importBackup(e.target.files[0]);
       e.target.value = '';
     });
+
+    // Ruhetag-Auswahl
+    document.querySelectorAll('#restDialog .rest-option').forEach((b) =>
+      b.addEventListener('click', () => {
+        getDay(currentKey, true).training = { restDay: true, restType: b.dataset.rest };
+        save();
+        $('#restDialog').close();
+        renderAll();
+      }));
+
+    // Wischgeste auf der Heute-Seite: links/rechts = Tag wechseln
+    let swipeX = null, swipeY = null;
+    const main = $('#main');
+    main.addEventListener('touchstart', (e) => {
+      if (currentView !== 'today' || e.touches.length !== 1) { swipeX = null; return; }
+      swipeX = e.touches[0].clientX;
+      swipeY = e.touches[0].clientY;
+    }, { passive: true });
+    main.addEventListener('touchend', (e) => {
+      if (swipeX == null || currentView !== 'today') return;
+      const dx = e.changedTouches[0].clientX - swipeX;
+      const dy = e.changedTouches[0].clientY - swipeY;
+      swipeX = null;
+      // Nur deutliche horizontale Wischer, kein Scrollen abfangen
+      if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+      const view = $('#view-today');
+      if (dx < 0) {
+        if (currentKey >= todayKey()) return; // nicht in die Zukunft
+        currentKey = addDays(currentKey, 1);
+        view.classList.remove('slide-left', 'slide-right');
+        void view.offsetWidth;
+        view.classList.add('slide-left');
+      } else {
+        currentKey = addDays(currentKey, -1);
+        view.classList.remove('slide-left', 'slide-right');
+        void view.offsetWidth;
+        view.classList.add('slide-right');
+      }
+      renderAll();
+    }, { passive: true });
 
     // Trainingsfortschritt: Workout-Auswahl
     $('#trainChartSelect').addEventListener('change', (e) => {

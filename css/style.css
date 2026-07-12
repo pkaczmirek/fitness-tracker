@@ -540,6 +540,22 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .round-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .round-grid label { font-size: 0.75rem; }
 
+/* Ruhetag-Auswahl */
+.rest-options { display: flex; flex-direction: column; gap: 8px; }
+.rest-option { text-align: left; }
+
+/* Wisch-Animation beim Tageswechsel */
+.view.slide-left { animation: slideLeft 0.18s ease; }
+.view.slide-right { animation: slideRight 0.18s ease; }
+@keyframes slideLeft {
+  from { transform: translateX(28px); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes slideRight {
+  from { transform: translateX(-28px); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+
 /* ===== Toast ===== */
 .toast {
   position: fixed;
