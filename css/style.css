@@ -44,6 +44,9 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* hidden-Attribut muss immer gewinnen, auch gegen display-Regeln unten */
+[hidden] { display: none !important; }
+
 html { height: 100%; }
 
 body {
