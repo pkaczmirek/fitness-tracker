@@ -581,6 +581,28 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
   to { transform: none; opacity: 1; }
 }
 
+/* Update-Banner */
+.update-banner {
+  position: fixed;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--primary);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 40;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+.version-info { text-align: center; margin: 4px 0 8px; }
+
 /* ===== Toast ===== */
 .toast {
   position: fixed;

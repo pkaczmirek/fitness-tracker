@@ -219,6 +219,7 @@
         </div>
         <input type="file" id="restoreFile" accept=".json,application/json" hidden>
       </div>
+      <p class="hint version-info" id="versionInfo"></p>
     </section>
 
   </main>
@@ -358,6 +359,11 @@
   </dialog>
 
   <div id="toast" class="toast" hidden></div>
+
+  <div id="updateBanner" class="update-banner" hidden>
+    <span>✨ Neue Version geladen</span>
+    <button class="btn btn-primary" id="updateReloadBtn">Jetzt neu starten</button>
+  </div>
 
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="js/app.js"></script>

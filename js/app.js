@@ -7,6 +7,9 @@
 
   const STORAGE_KEY = 'fitness-tracker:v1';
 
+  // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
+  const APP_VERSION = 9;
+
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
 
@@ -1180,6 +1183,7 @@
     $('#tfFasting').value = tf.fasting || '';
     $('#tfSleep').value = tf.sleep || '';
     $('#tfSweets').value = tf.sweets || '';
+    $('#versionInfo').textContent = `App-Version ${APP_VERSION}`;
     const day = challengeDay(todayKey());
     $('#settingsHint').textContent =
       (day >= 1 && day <= data.settings.challengeDays)
@@ -1908,11 +1912,25 @@
     // Dialog-Abbrechen-Buttons
     document.querySelectorAll('dialog').forEach(wireCloseButtons);
 
-    // Service Worker
+    // Service Worker mit aktiver Update-Suche und Neustart-Banner
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch((e) =>
-        console.warn('Service Worker nicht registriert:', e));
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        reg.update().catch(() => {});
+        // Bei Rückkehr aus dem Hintergrund erneut nach Updates suchen
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) reg.update().catch(() => {});
+        });
+      }).catch((e) => console.warn('Service Worker nicht registriert:', e));
+
+      // Wenn eine neue Version übernommen hat: Banner zum Neustart zeigen
+      // (nicht bei der allerersten Installation)
+      let hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController) { hadController = true; return; }
+        $('#updateBanner').hidden = false;
+      });
     }
+    $('#updateReloadBtn').addEventListener('click', () => location.reload());
 
     renderAll();
   }

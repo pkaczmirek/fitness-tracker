@@ -48,6 +48,9 @@ Pages, Cloudflare Pages, Netlify – alle kostenlos für statische Seiten).
 - Reines HTML/CSS/JS, kein Build-Schritt
 - [SheetJS](https://sheetjs.com) (lokal in `vendor/`) für den Excel-Export
 - Service Worker (`sw.js`) für Offline-Betrieb — **bei Änderungen an den
-  App-Dateien die Konstante `CACHE` in `sw.js` hochzählen** (z. B. `v1` → `v2`),
-  sonst sehen installierte Apps die alte Version
+  App-Dateien die Konstante `CACHE` in `sw.js` UND `APP_VERSION` in
+  `js/app.js` hochzählen** (beide auf dieselbe Nummer), sonst sehen
+  installierte Apps die alte Version. Die App zeigt die Version im
+  „Mehr"-Tab an und bietet nach dem Laden eines Updates einen
+  Neustart-Knopf an.
 - Daten-Schlüssel im localStorage: `fitness-tracker:v1`
