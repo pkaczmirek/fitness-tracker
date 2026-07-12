@@ -17,6 +17,19 @@
     free: 'Freies Ergebnis'
   };
 
+  /* Übungskatalog der Challenge – Auswahl je Training, Zählung je Einheit */
+  const EXERCISES = [
+    'Bodyrocks',
+    'Scorpion Kicks',
+    'Liegestütze',
+    'Tischziehen',
+    'Fallschirmspringer',
+    'Einbeiniges Kreuzheben',
+    'Iron Mikes',
+    'Prisoner Squats m Sprung',
+    'Lunges'
+  ];
+
   /* Ruhetag-Varianten; alle außer "rest" zählen als aktiver Ruhetag.
      Alte Einträge ohne restType gelten als tatsächlicher Ruhetag. */
   const REST_TYPES = {
@@ -277,6 +290,19 @@
       else rests++;
     }
     return { trained, activeRests, rests, calDays, start };
+  }
+
+  /* Lebenszeit-Summen je Übung über alle Trainings */
+  function exerciseTotals() {
+    const totals = {};
+    for (const day of Object.values(data.days)) {
+      const c = day.training && day.training.exerciseCounts;
+      if (!c) continue;
+      for (const [name, n] of Object.entries(c)) {
+        totals[name] = (totals[name] || 0) + (Number(n) || 0);
+      }
+    }
+    return totals;
   }
 
   /* Letztes erfasstes Ergebnis eines Workouts vor einem Datum */
@@ -665,6 +691,7 @@
 
     renderWeightChart();
     renderTrainingChart();
+    renderExerciseTotals();
 
     const list = $('#historyList');
     list.innerHTML = '';
@@ -941,6 +968,27 @@
     });
   }
 
+  /* Übungen gesamt: Lebenszeit-Zähler, absteigend sortiert */
+  function renderExerciseTotals() {
+    const box = $('#exerciseTotals');
+    box.innerHTML = '';
+    const totals = exerciseTotals();
+    const rows = Object.entries(totals)
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (!rows.length) {
+      box.append(el('p', { class: 'empty-note' },
+        'Trage beim Erfassen eines Trainings die Anzahl pro Übung ein – hier wächst dann dein Gesamtkonto.'));
+      return;
+    }
+    for (const [name, n] of rows) {
+      box.append(el('div', { class: 'ex-row' },
+        el('span', { class: 'ex-name' }, name),
+        el('span', { class: 'ex-count' }, fmt(n))
+      ));
+    }
+  }
+
   /* Trainingsfortschritt: Ergebnis-Verlauf pro Workout */
   let trainChartWorkoutId = null;
 
@@ -998,6 +1046,7 @@
     let s = SCHEME_LABELS[w.scheme] || '';
     if (w.scheme === 'amrap' && w.minutes) s += ` · ${w.minutes} min`;
     if (w.scheme === 'fixedRounds' && w.rounds) s += ` · ${w.rounds} Runden`;
+    if (w.exercises && w.exercises.length) s += ` · ${w.exercises.length} Übungen`;
     return s;
   }
 
@@ -1168,6 +1217,14 @@
     $('#woMinutes').value = workout && workout.minutes ? workout.minutes : 20;
     $('#woRounds').value = workout && workout.rounds ? workout.rounds : 6;
     $('#woNote').value = workout ? (workout.note || '') : '';
+    const box = $('#woExercises');
+    box.innerHTML = '';
+    const selected = new Set((workout && workout.exercises) || []);
+    for (const name of EXERCISES) {
+      const cb = el('input', { type: 'checkbox', value: name });
+      if (selected.has(name)) cb.checked = true;
+      box.append(el('label', { class: 'checkbox-label' }, cb, name));
+    }
     updateWorkoutFields();
     $('#workoutDialog').showModal();
   }
@@ -1186,7 +1243,8 @@
       scheme: $('#woScheme').value,
       minutes: Number($('#woMinutes').value) || null,
       rounds: Number($('#woRounds').value) || null,
-      note: $('#woNote').value.trim()
+      note: $('#woNote').value.trim(),
+      exercises: [...document.querySelectorAll('#woExercises input:checked')].map((c) => c.value)
     };
     if (!w.name) return;
     if (editWorkoutId) {
@@ -1272,6 +1330,21 @@
       box.append(el('label', null, 'Ergebnis',
         el('textarea', { id: 'lfText', rows: 3, maxlength: 300 }, use ? (use.resultText || '') : '')));
     }
+
+    // Übungs-Zähler (Gesamtzahl je Übung, optional)
+    if (w.exercises && w.exercises.length) {
+      box.append(el('label', null, 'Übungen – wie viele insgesamt? (optional)'));
+      const grid = el('div', { class: 'exercise-grid' });
+      for (const name of w.exercises) {
+        grid.append(el('label', null, name,
+          el('input', {
+            type: 'number', class: 'lf-exercise', 'data-exercise': name,
+            min: 0, max: 9999, inputmode: 'numeric',
+            value: use && use.exerciseCounts && use.exerciseCounts[name] != null ? use.exerciseCounts[name] : ''
+          })));
+      }
+      box.append(grid);
+    }
   }
 
   function submitLog(ev) {
@@ -1300,6 +1373,12 @@
     } else {
       t.resultText = ($('#lfText') ? $('#lfText').value : '').trim();
     }
+
+    const counts = {};
+    document.querySelectorAll('.lf-exercise').forEach((i) => {
+      if (i.value !== '') counts[i.dataset.exercise] = Number(i.value) || 0;
+    });
+    if (Object.keys(counts).length) t.exerciseCounts = counts;
 
     getDay(currentKey, true).training = t;
     save();
@@ -1439,6 +1518,31 @@
     ws3['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 36 }]
       .concat(Array.from({ length: maxRounds }, () => ({ wch: 9 })), [{ wch: 28 }]);
     XLSX.utils.book_append_sheet(wb, ws3, 'Trainings');
+
+    // Blatt 4: Übungen (Detail + Gesamtsummen)
+    const exRows = [['Datum', 'Challenge-Tag', 'Training', 'Übung', 'Anzahl']];
+    for (const key of keys) {
+      const t = data.days[key].training;
+      if (!t || !t.exerciseCounts) continue;
+      const cd = challengeDay(key);
+      const w = workoutById(t.workoutId);
+      for (const [name, n] of Object.entries(t.exerciseCounts)) {
+        exRows.push([
+          key,
+          cd >= 1 && cd <= S.challengeDays ? cd : '',
+          w ? w.name : t.workoutName || 'Training',
+          name, n
+        ]);
+      }
+    }
+    exRows.push([]);
+    exRows.push(['', '', '', 'GESAMT', '']);
+    for (const [name, n] of Object.entries(exerciseTotals()).sort((a, b) => b[1] - a[1])) {
+      exRows.push(['', '', '', name, n]);
+    }
+    const ws4 = XLSX.utils.aoa_to_sheet(exRows);
+    ws4['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 20 }, { wch: 24 }, { wch: 8 }];
+    XLSX.utils.book_append_sheet(wb, ws4, 'Übungen');
 
     return wb;
   }
