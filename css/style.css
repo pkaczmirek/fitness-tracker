@@ -339,6 +339,7 @@ main { padding: 12px 12px 24px; max-width: 640px; margin: 0 auto; }
 .manage-main { flex: 1; min-width: 0; }
 .manage-title { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
 .manage-sub { color: var(--ink-muted); font-size: 0.8rem; margin-top: 1px; }
+.manage-record { color: var(--ink-2); font-size: 0.8rem; font-weight: 600; margin-top: 3px; }
 
 .history-row {
   display: block;

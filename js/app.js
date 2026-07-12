@@ -305,6 +305,66 @@
     return totals;
   }
 
+  /* ---------- Persönliche Rekorde je Workout ----------
+     amrap: meiste Runden (+ Zusatz-Wdh. als Feinvergleich)
+     fixedRounds: meiste Wdh. in der letzten Runde (Gesamt als Feinvergleich)
+     time: schnellste Zeit. Höherer Score = besser. */
+
+  function lastRoundReps(t) {
+    const arr = (t.repsPerRound || []).filter((r) => r != null && r !== '');
+    return arr.length ? Number(arr[arr.length - 1]) : null;
+  }
+
+  function recordScore(t, scheme) {
+    if (!t || t.restDay) return null;
+    if (scheme === 'amrap') {
+      if (t.rounds == null || isNaN(Number(t.rounds))) return null;
+      return Number(t.rounds) * 10000 + (Number(t.extraReps) || 0);
+    }
+    if (scheme === 'fixedRounds') {
+      const last = lastRoundReps(t);
+      if (last == null || isNaN(last)) return null;
+      const total = (t.repsPerRound || []).reduce((s, r) => s + (Number(r) || 0), 0);
+      return last * 100000 + total;
+    }
+    if (scheme === 'time') {
+      const sec = (Number(t.timeMin) || 0) * 60 + (Number(t.timeSec) || 0);
+      return sec > 0 ? -sec : null;
+    }
+    return null;
+  }
+
+  function recordText(w, t) {
+    if (w.scheme === 'amrap') {
+      let s = `${t.rounds} Runden in ${t.minutes || w.minutes || '?'} min`;
+      if (t.extraReps) s += ` + ${t.extraReps} Wdh.`;
+      return s;
+    }
+    if (w.scheme === 'fixedRounds') {
+      const total = (t.repsPerRound || []).reduce((s, r) => s + (Number(r) || 0), 0);
+      return `${lastRoundReps(t)} Wdh. in der letzten Runde (gesamt ${fmt(total)})`;
+    }
+    if (w.scheme === 'time') {
+      const m = Number(t.timeMin) || 0;
+      const s = Number(t.timeSec) || 0;
+      return `${m}:${String(s).padStart(2, '0')} min`;
+    }
+    return '';
+  }
+
+  function workoutRecord(w, excludeKey) {
+    let best = null;
+    for (const k of Object.keys(data.days)) {
+      if (k === excludeKey) continue;
+      const t = data.days[k].training;
+      if (!t || t.restDay || t.workoutId !== w.id) continue;
+      const score = recordScore(t, w.scheme);
+      if (score == null) continue;
+      if (!best || score > best.score) best = { score, key: k, t };
+    }
+    return best;
+  }
+
   /* Letztes erfasstes Ergebnis eines Workouts vor einem Datum */
   function lastTrainingResult(workoutId, beforeKey) {
     const keys = Object.keys(data.days).filter((k) => k < beforeKey).sort().reverse();
@@ -1057,11 +1117,17 @@
       wl.append(el('p', { class: 'empty-note' }, 'Noch keine Trainings angelegt.'));
     }
     for (const w of data.workouts) {
+      const rec = workoutRecord(w);
+      const main = el('div', { class: 'manage-main' },
+        el('div', { class: 'manage-title' }, w.name),
+        el('div', { class: 'manage-sub' }, workoutSubtitle(w) + (w.note ? ` · ${w.note}` : ''))
+      );
+      if (rec) {
+        main.append(el('div', { class: 'manage-record' },
+          `🏆 Rekord: ${recordText(w, rec.t)} · ${formatDateShort(rec.key)}`));
+      }
       wl.append(el('div', { class: 'manage-row' },
-        el('div', { class: 'manage-main' },
-          el('div', { class: 'manage-title' }, w.name),
-          el('div', { class: 'manage-sub' }, workoutSubtitle(w) + (w.note ? ` · ${w.note}` : ''))
-        ),
+        main,
         el('button', { class: 'link-btn', onclick: () => openWorkoutDialog(w) }, 'Bearbeiten'),
         el('button', {
           class: 'link-btn danger-btn', onclick: () => {
@@ -1299,6 +1365,13 @@
         `💪 Letztes Mal (${tag}${formatDateLong(last.key)}): ${trainingResultText(last.t)}`;
     }
 
+    // Persönlicher Rekord (ohne den gerade bearbeiteten Tag)
+    $('#logRecord').textContent = '';
+    const rec = workoutRecord(w, currentKey);
+    if (rec) {
+      $('#logRecord').textContent = `🏆 Rekord: ${recordText(w, rec.t)} (${formatDateShort(rec.key)})`;
+    }
+
     const use = existing && existing.workoutId === w.id ? existing : null;
 
     if (w.scheme === 'amrap') {
@@ -1380,11 +1453,18 @@
     });
     if (Object.keys(counts).length) t.exerciseCounts = counts;
 
+    // Neuer Rekord? (Vergleich ohne den aktuellen Tag)
+    const prevRecord = workoutRecord(w, currentKey);
+    const newScore = recordScore(t, w.scheme);
+    const isRecord = newScore != null && (!prevRecord || newScore > prevRecord.score);
+
     getDay(currentKey, true).training = t;
     save();
     $('#logDialog').close();
     renderAll();
-    toast(editLogMode ? 'Training aktualisiert' : 'Training gespeichert 💪');
+    toast(isRecord
+      ? `🏆 Neuer Rekord bei ${w.name}!`
+      : (editLogMode ? 'Training aktualisiert' : 'Training gespeichert 💪'));
   }
 
   /* ---------- Lebensmittel ---------- */
