@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 11;
+  const APP_VERSION = 12;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -646,9 +646,16 @@
       return s;
     }
     if (scheme === 'fixedRounds') {
-      const reps = (t.repsPerRound || []).map((r) => (r == null || r === '' ? '–' : r));
-      const total = (t.repsPerRound || []).reduce((s, r) => s + (Number(r) || 0), 0);
-      return `${reps.length} Runden: ${reps.join(' / ')} Wdh. (gesamt ${fmt(total)})`;
+      if (t.repsPerRound && t.repsPerRound.length) {
+        const reps = t.repsPerRound.map((r) => (r == null || r === '' ? '–' : r));
+        const total = t.repsPerRound.reduce((s, r) => s + (Number(r) || 0), 0);
+        return `${reps.length} Runden: ${reps.join(' / ')} Wdh. (gesamt ${fmt(total)})`;
+      }
+      if (t.lastRound && Object.keys(t.lastRound).length) {
+        return 'Letzte Runde: ' + Object.entries(t.lastRound)
+          .map(([name, v]) => `${name} ${fmt(v)}`).join(' · ');
+      }
+      return `${(w && w.rounds) || '?'} Runden`;
     }
     if (scheme === 'time') {
       const m = Number(t.timeMin) || 0;
@@ -1092,7 +1099,14 @@
       if (!t || t.restDay || t.workoutId !== w.id) continue;
       let v = null;
       if (w.scheme === 'amrap') v = t.rounds != null ? Number(t.rounds) : null;
-      else if (w.scheme === 'fixedRounds') v = (t.repsPerRound || []).reduce((s, r) => s + (Number(r) || 0), 0);
+      else if (w.scheme === 'fixedRounds') {
+        // Gesamt-Wdh.: aus Übungs-Summen, sonst (Alt-Daten) aus den Rundenwerten
+        if (t.exerciseCounts) {
+          v = Object.values(t.exerciseCounts).reduce((s, x) => s + (Number(x) || 0), 0);
+        } else if (t.repsPerRound && t.repsPerRound.length) {
+          v = t.repsPerRound.reduce((s, r) => s + (Number(r) || 0), 0);
+        }
+      }
       else if (w.scheme === 'time') v = (Number(t.timeMin) || 0) + (Number(t.timeSec) || 0) / 60;
       if (v != null && !isNaN(v)) entries.push({ key: k, value: v });
     }
@@ -1412,19 +1426,8 @@
           el('input', { type: 'number', id: 'lfExtra', min: 0, max: 500, inputmode: 'numeric', value: use && use.extraReps ? use.extraReps : '' }))
       );
     } else if (w.scheme === 'fixedRounds') {
-      const n = w.rounds || 6;
-      const grid = el('div', { class: 'round-grid' });
-      for (let i = 0; i < n; i++) {
-        grid.append(el('label', null, `Runde ${i + 1}`,
-          el('input', {
-            type: 'number', class: 'lf-round', min: 0, max: 999, inputmode: 'numeric',
-            value: use && use.repsPerRound && use.repsPerRound[i] != null ? use.repsPerRound[i] : ''
-          })));
-      }
-      box.append(el('label', null, 'Wiederholungen pro Runde'), grid);
-
-      // Rekord-relevant: Wdh. der letzten Runde je Übung
       if (w.exercises && w.exercises.length) {
+        // Rekord-relevant: Wdh. der letzten Runde je Übung
         const lrGrid = el('div', { class: 'exercise-grid' });
         for (const name of w.exercises) {
           lrGrid.append(el('label', null, name,
@@ -1435,6 +1438,18 @@
             })));
         }
         box.append(el('label', null, '🏆 Letzte Runde – Wdh. je Übung (für den Rekord)'), lrGrid);
+      } else {
+        // Rückfall ohne Übungsauswahl: klassisch Wdh. je Runde
+        const n = w.rounds || 6;
+        const grid = el('div', { class: 'round-grid' });
+        for (let i = 0; i < n; i++) {
+          grid.append(el('label', null, `Runde ${i + 1}`,
+            el('input', {
+              type: 'number', class: 'lf-round', min: 0, max: 999, inputmode: 'numeric',
+              value: use && use.repsPerRound && use.repsPerRound[i] != null ? use.repsPerRound[i] : ''
+            })));
+        }
+        box.append(el('label', null, 'Wiederholungen pro Runde'), grid);
       }
     } else if (w.scheme === 'time') {
       box.append(el('div', { class: 'form-row' },
@@ -1482,8 +1497,10 @@
       t.extraReps = Number($('#lfExtra').value) || 0;
       if (isNaN(t.rounds)) return;
     } else if (w.scheme === 'fixedRounds') {
-      t.repsPerRound = [...document.querySelectorAll('.lf-round')]
-        .map((i) => (i.value === '' ? null : Number(i.value)));
+      const roundInputs = [...document.querySelectorAll('.lf-round')];
+      if (roundInputs.length) {
+        t.repsPerRound = roundInputs.map((i) => (i.value === '' ? null : Number(i.value)));
+      }
     } else if (w.scheme === 'time') {
       t.timeMin = Number($('#lfMin').value) || 0;
       t.timeSec = Number($('#lfSec').value) || 0;
