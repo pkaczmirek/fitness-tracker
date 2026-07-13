@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 10;
+  const APP_VERSION = 11;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -366,6 +366,36 @@
       if (!best || score > best.score) best = { score, key: k, t };
     }
     return best;
+  }
+
+  /* Feste Runden: Bestwert der letzten Runde je Übung (name → {value, key}) */
+  function exerciseLastRoundRecords(w, excludeKey) {
+    const recs = {};
+    for (const k of Object.keys(data.days)) {
+      if (k === excludeKey) continue;
+      const t = data.days[k].training;
+      if (!t || t.restDay || t.workoutId !== w.id || !t.lastRound) continue;
+      for (const [name, v] of Object.entries(t.lastRound)) {
+        const n = Number(v);
+        if (isNaN(n)) continue;
+        if (!recs[name] || n > recs[name].value) recs[name] = { value: n, key: k };
+      }
+    }
+    return recs;
+  }
+
+  /* Rekord-Text je Workout; fixedRounds mit Übungen → je Übung */
+  function recordSummaryText(w, excludeKey) {
+    if (w.scheme === 'fixedRounds' && w.exercises && w.exercises.length) {
+      const recs = exerciseLastRoundRecords(w, excludeKey);
+      const parts = w.exercises
+        .filter((n) => recs[n])
+        .map((n) => `${n} ${fmt(recs[n].value)}`);
+      if (parts.length) return `Letzte Runde: ${parts.join(' · ')}`;
+      // Noch keine Übungswerte erfasst → alter Gesamt-Vergleich als Rückfall
+    }
+    const rec = workoutRecord(w, excludeKey);
+    return rec ? `${recordText(w, rec.t)} · ${formatDateShort(rec.key)}` : null;
   }
 
   /* Letztes erfasstes Ergebnis eines Workouts vor einem Datum */
@@ -1120,14 +1150,13 @@
       wl.append(el('p', { class: 'empty-note' }, 'Noch keine Trainings angelegt.'));
     }
     for (const w of data.workouts) {
-      const rec = workoutRecord(w);
+      const recTxt = recordSummaryText(w);
       const main = el('div', { class: 'manage-main' },
         el('div', { class: 'manage-title' }, w.name),
         el('div', { class: 'manage-sub' }, workoutSubtitle(w) + (w.note ? ` · ${w.note}` : ''))
       );
-      if (rec) {
-        main.append(el('div', { class: 'manage-record' },
-          `🏆 Rekord: ${recordText(w, rec.t)} · ${formatDateShort(rec.key)}`));
+      if (recTxt) {
+        main.append(el('div', { class: 'manage-record' }, `🏆 Rekord: ${recTxt}`));
       }
       wl.append(el('div', { class: 'manage-row' },
         main,
@@ -1370,11 +1399,8 @@
     }
 
     // Persönlicher Rekord (ohne den gerade bearbeiteten Tag)
-    $('#logRecord').textContent = '';
-    const rec = workoutRecord(w, currentKey);
-    if (rec) {
-      $('#logRecord').textContent = `🏆 Rekord: ${recordText(w, rec.t)} (${formatDateShort(rec.key)})`;
-    }
+    const recTxt = recordSummaryText(w, currentKey);
+    $('#logRecord').textContent = recTxt ? `🏆 Rekord: ${recTxt}` : '';
 
     const use = existing && existing.workoutId === w.id ? existing : null;
 
@@ -1396,6 +1422,20 @@
           })));
       }
       box.append(el('label', null, 'Wiederholungen pro Runde'), grid);
+
+      // Rekord-relevant: Wdh. der letzten Runde je Übung
+      if (w.exercises && w.exercises.length) {
+        const lrGrid = el('div', { class: 'exercise-grid' });
+        for (const name of w.exercises) {
+          lrGrid.append(el('label', null, name,
+            el('input', {
+              type: 'number', class: 'lf-lastround', 'data-exercise': name,
+              min: 0, max: 999, inputmode: 'numeric',
+              value: use && use.lastRound && use.lastRound[name] != null ? use.lastRound[name] : ''
+            })));
+        }
+        box.append(el('label', null, '🏆 Letzte Runde – Wdh. je Übung (für den Rekord)'), lrGrid);
+      }
     } else if (w.scheme === 'time') {
       box.append(el('div', { class: 'form-row' },
         el('label', null, 'Minuten',
@@ -1457,18 +1497,36 @@
     });
     if (Object.keys(counts).length) t.exerciseCounts = counts;
 
+    const lr = {};
+    document.querySelectorAll('.lf-lastround').forEach((i) => {
+      if (i.value !== '') lr[i.dataset.exercise] = Number(i.value) || 0;
+    });
+    if (Object.keys(lr).length) t.lastRound = lr;
+
     // Neuer Rekord? (Vergleich ohne den aktuellen Tag)
-    const prevRecord = workoutRecord(w, currentKey);
-    const newScore = recordScore(t, w.scheme);
-    const isRecord = newScore != null && (!prevRecord || newScore > prevRecord.score);
+    let recordMsg = null;
+    if (w.scheme === 'fixedRounds' && w.exercises && w.exercises.length) {
+      // Je Übung: letzte Runde gegen bisherigen Bestwert
+      if (t.lastRound) {
+        const prev = exerciseLastRoundRecords(w, currentKey);
+        const beaten = Object.entries(t.lastRound)
+          .filter(([name, v]) => !prev[name] || v > prev[name].value)
+          .map(([name, v]) => `${name} ${fmt(v)}`);
+        if (beaten.length) recordMsg = `🏆 Neuer Rekord: ${beaten.join(', ')}!`;
+      }
+    } else {
+      const prevRecord = workoutRecord(w, currentKey);
+      const newScore = recordScore(t, w.scheme);
+      if (newScore != null && (!prevRecord || newScore > prevRecord.score)) {
+        recordMsg = `🏆 Neuer Rekord bei ${w.name}!`;
+      }
+    }
 
     getDay(currentKey, true).training = t;
     save();
     $('#logDialog').close();
     renderAll();
-    toast(isRecord
-      ? `🏆 Neuer Rekord bei ${w.name}!`
-      : (editLogMode ? 'Training aktualisiert' : 'Training gespeichert 💪'));
+    toast(recordMsg || (editLogMode ? 'Training aktualisiert' : 'Training gespeichert 💪'));
   }
 
   /* ---------- Lebensmittel ---------- */
@@ -1604,28 +1662,34 @@
     XLSX.utils.book_append_sheet(wb, ws3, 'Trainings');
 
     // Blatt 4: Übungen (Detail + Gesamtsummen)
-    const exRows = [['Datum', 'Challenge-Tag', 'Training', 'Übung', 'Anzahl']];
+    const exRows = [['Datum', 'Challenge-Tag', 'Training', 'Übung', 'Anzahl gesamt', 'Letzte Runde']];
     for (const key of keys) {
       const t = data.days[key].training;
-      if (!t || !t.exerciseCounts) continue;
+      if (!t || (!t.exerciseCounts && !t.lastRound)) continue;
       const cd = challengeDay(key);
       const w = workoutById(t.workoutId);
-      for (const [name, n] of Object.entries(t.exerciseCounts)) {
+      const names = [...new Set([
+        ...Object.keys(t.exerciseCounts || {}),
+        ...Object.keys(t.lastRound || {})
+      ])];
+      for (const name of names) {
         exRows.push([
           key,
           cd >= 1 && cd <= S.challengeDays ? cd : '',
           w ? w.name : t.workoutName || 'Training',
-          name, n
+          name,
+          t.exerciseCounts && t.exerciseCounts[name] != null ? t.exerciseCounts[name] : '',
+          t.lastRound && t.lastRound[name] != null ? t.lastRound[name] : ''
         ]);
       }
     }
     exRows.push([]);
-    exRows.push(['', '', '', 'GESAMT', '']);
+    exRows.push(['', '', '', 'GESAMT', '', '']);
     for (const [name, n] of Object.entries(exerciseTotals()).sort((a, b) => b[1] - a[1])) {
-      exRows.push(['', '', '', name, n]);
+      exRows.push(['', '', '', name, n, '']);
     }
     const ws4 = XLSX.utils.aoa_to_sheet(exRows);
-    ws4['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 20 }, { wch: 24 }, { wch: 8 }];
+    ws4['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 20 }, { wch: 24 }, { wch: 13 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'Übungen');
 
     return wb;
