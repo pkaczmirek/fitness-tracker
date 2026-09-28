@@ -1,5 +1,5 @@
 /* Service Worker – App-Shell offline verfügbar machen */
-const CACHE = 'fitness-tracker-v17';
+const CACHE = 'fitness-tracker-v18';
 
 const ASSETS = [
   './',
@@ -16,8 +16,11 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // cache: 'reload' umgeht den HTTP-Cache des Browsers (GitHub Pages: max-age=600),
+  // sonst landen unter der neuen Version die alten Dateien im Offline-Speicher
+  const fresh = ASSETS.map((url) => new Request(url, { cache: 'reload' }));
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => cache.addAll(fresh)).then(() => self.skipWaiting())
   );
 });
 
