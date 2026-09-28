@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 14;
+  const APP_VERSION = 15;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -103,7 +103,7 @@
 
   function defaultData() {
     return {
-      version: 2,
+      version: 3,
       settings: {
         // Tag 1 der 90-Tage-Challenge (unter „Mehr" änderbar)
         challengeStart: '2026-06-01',
@@ -117,7 +117,10 @@
       },
       workouts: [],
       foods: [],
-      days: {}
+      days: {},
+      // Trainingsplan-Ergebnisse (nach Einheiten-Kennung) und Verschiebungen
+      planLog: PlanLog.emptyLog(),
+      planMoves: {}
     };
   }
 
@@ -141,6 +144,14 @@
       if (d.settings.fastingWindow == null) d.settings.fastingWindow = 6;
       d.version = 2;
     }
+    if (d.version < 3) {
+      // v2 → v3: Platz für Trainingsplan-Ergebnisse
+      d.version = 3;
+    }
+    if (!d.planLog || typeof d.planLog !== 'object') d.planLog = PlanLog.emptyLog();
+    if (!d.planLog.sessions) d.planLog.sessions = {};
+    if (!Array.isArray(d.planLog.tests)) d.planLog.tests = [];
+    if (!d.planMoves || typeof d.planMoves !== 'object') d.planMoves = {};
     return d;
   }
 
@@ -429,6 +440,22 @@
 
   function hasPlan() {
     return PlanStore.hasPlan(plan);
+  }
+
+  // Einheiten-Kennung → { session, date }; nach jedem Plan-Wechsel neu aufbauen
+  let planIndexCache = null;
+  function planIndex() {
+    if (!planIndexCache) planIndexCache = PlanLog.sessionIndex(plan);
+    return planIndexCache;
+  }
+
+  /* Einheiten eines Tages nach allen Verschiebungen */
+  function sessionsOnDate(date) {
+    return PlanLog.sessionsOn(plan, planIndex(), data.planMoves, date);
+  }
+
+  function sessionDate(id) {
+    return PlanLog.effectiveDate(planIndex(), data.planMoves, id);
   }
 
   function savePlan() {
@@ -1819,6 +1846,7 @@
         // Alte Backups ohne Plan lassen den aktuellen Plan stehen
         if (planPart) {
           plan = Object.assign(PlanStore.emptyStore(), planPart);
+          planIndexCache = null;
           savePlan();
         }
         currentKey = todayKey();
@@ -1854,6 +1882,11 @@
 
   /* ---------- Heute: Plan-Karte ---------- */
 
+  function stateChip(state) {
+    const st = PlanLog.STATES[state];
+    return el('span', { class: `state-chip state-${state}` }, `${st.icon} ${st.label}`);
+  }
+
   function renderPlanCard() {
     const card = $('#cardPlan');
     const active = hasPlan();
@@ -1867,13 +1900,15 @@
 
     card.innerHTML = '';
     const day = plan.days[currentKey];
+    const entries = sessionsOnDate(currentKey);
+    const away = PlanLog.movedAway(plan, data.planMoves, currentKey);
     const week = PlanStore.weekForDate(plan, currentKey);
     const head = el('div', { class: 'card-head' }, el('h2', null, '🗓️ Trainingsplan'));
     if (day && day.highlight) head.append(el('span', { class: 'plan-badge' }, day.highlight));
     card.append(head);
     if (week) card.append(el('p', { class: 'plan-week-line' }, `${week.phase} · ${week.title}`));
 
-    if (!day) {
+    if (!day && !entries.length) {
       const b = PlanStore.bounds(plan);
       if (currentKey < b.first) {
         card.append(el('p', { class: 'empty-note' }, `Der Plan beginnt am ${formatDateLong(b.first)}.`));
@@ -1887,37 +1922,44 @@
       return;
     }
 
-    if (day.rest) card.append(el('div', { class: 'rest-banner' }, '😌 Ruhetag'));
-    if (day.note) card.append(el('p', { class: 'plan-day-note' }, day.note));
-    for (const s of day.sessions) {
+    if (day && day.rest) card.append(el('div', { class: 'rest-banner' }, '😌 Ruhetag'));
+    if (day && day.note) card.append(el('p', { class: 'plan-day-note' }, day.note));
+    const today = todayKey();
+    for (const { session: s, movedFrom } of entries) {
+      const state = PlanLog.sessionState(data.planLog.sessions[s.id], currentKey, today, s.optional);
       const meta = [placeNames(s.place), PlanStore.minutesText(s.minutes), effortText(s.effort)].filter(Boolean);
       const main = el('div', { class: 'plan-session-main' },
         el('div', { class: 'plan-session-title' }, s.title,
           s.optional ? el('span', { class: 'plan-tag' }, 'freiwillig') : null),
         el('div', { class: 'plan-session-meta' }, meta.join(' · ')));
-      if (s.altDates && s.altDates.length) {
+      if (movedFrom) {
+        main.append(el('div', { class: 'plan-session-meta' }, `verschoben vom ${formatDayShort(movedFrom)}`));
+      } else if (s.altDates && s.altDates.length) {
         main.append(el('div', { class: 'plan-session-meta' }, `auch möglich: ${s.altDates.map(formatDayShort).join(', ')}`));
       }
+      if (state !== 'open') main.append(stateChip(state));
       card.append(el('button', {
         class: 'plan-session', type: 'button',
-        onclick: () => openSessionPage(currentKey, s.id)
+        onclick: () => openSessionPage(s.id)
       }, main, el('span', { class: 'plan-chevron', 'aria-hidden': 'true' }, '›')));
     }
-    if (!day.sessions.length && !day.rest && !day.note) {
+    for (const { session: s, to } of away) {
+      card.append(el('p', { class: 'plan-day-note' }, `↪ „${s.title}“ ist verschoben auf ${formatDayShort(to)}`));
+    }
+    if (!entries.length && !away.length && !(day && (day.rest || day.note))) {
       card.append(el('p', { class: 'empty-note' }, 'Frei: an diesem Tag ist nichts geplant.'));
     }
   }
 
   /* ---------- Einheit-Seite ---------- */
 
-  function findSession(date, id) {
-    const day = plan.days[date];
-    return day ? day.sessions.find((s) => s.id === id) || null : null;
-  }
+  const VARIANT_LABELS = { normal: 'Normal', short: 'Kurz', home: 'Zuhause' };
 
-  function openSessionPage(date, id) {
-    if (!findSession(date, id)) return;
-    openSession = { date, id, variant: 'normal' };
+  function openSessionPage(id) {
+    const hit = planIndex().get(id);
+    if (!hit) return;
+    const r = data.planLog.sessions[id];
+    openSession = { id, variant: r && r.variant ? r.variant : 'normal' };
     renderSessionPage();
     $('#sessionPage').hidden = false;
     $('#sessionPage').scrollTop = 0;
@@ -1930,26 +1972,100 @@
     openSession = null;
     $('#sessionPage').hidden = true;
     document.body.classList.remove('page-open');
+    renderAll();
+  }
+
+  /* Ergebnis einer Einheit anlegen (erst bei der ersten Eingabe) */
+  function ensureResult(ctx) {
+    let r = data.planLog.sessions[ctx.s.id];
+    if (!r) {
+      r = {
+        sessionId: ctx.s.id, plannedDate: ctx.plannedDate, date: ctx.date, title: ctx.s.title,
+        variant: ctx.variantName, status: null, effort: null, minutes: null, note: '', items: []
+      };
+      data.planLog.sessions[ctx.s.id] = r;
+    }
+    r.date = ctx.date;
+    r.title = ctx.s.title;
+    if (r.variant !== ctx.variantName) { r.variant = ctx.variantName; r.items = []; }
+    return r;
+  }
+
+  /* Gespeichertes Ergebnis eines Eintrags oder eine frische Vorlage */
+  function itemView(ctx, idx) {
+    const it = ctx.items[idx];
+    const r = data.planLog.sessions[ctx.s.id];
+    const stored = r && r.variant === ctx.variantName ? r.items[idx] : null;
+    if (PlanLog.matchesItem(stored, it)) return stored;
+    const ex = it.exercise != null ? plan.exercises[it.exercise] : null;
+    const last = it.exercise != null ? PlanLog.lastExerciseResult(data.planLog, it.exercise, ctx.s.id, ctx.date) : null;
+    return PlanLog.newItemResult(it, ex, last);
+  }
+
+  function mutateItem(ctx, idx, fn, rerender) {
+    const r = ensureResult(ctx);
+    let ir = r.items[idx];
+    if (!PlanLog.matchesItem(ir, ctx.items[idx])) {
+      ir = itemView(ctx, idx);
+      r.items[idx] = ir;
+    }
+    fn(ir);
+    r.updatedAt = new Date().toISOString();
+    save();
+    if (rerender !== false) renderSessionPage();
+  }
+
+  function mutateSession(ctx, fn, rerender) {
+    const r = ensureResult(ctx);
+    fn(r);
+    r.updatedAt = new Date().toISOString();
+    save();
+    if (rerender !== false) renderSessionPage();
+  }
+
+  function switchVariant(ctx, name) {
+    if (name === ctx.variantName) return;
+    const r = data.planLog.sessions[ctx.s.id];
+    if (r && r.items.some(PlanLog.itemHasData)) {
+      const ok = confirm(`Du hast in „${VARIANT_LABELS[ctx.variantName]}“ schon Werte eingetragen. ` +
+        `Beim Umschalten auf „${VARIANT_LABELS[name]}“ werden sie verworfen. Umschalten?`);
+      if (!ok) return;
+      r.items = [];
+    }
+    if (r) { r.variant = name; save(); }
+    openSession.variant = name;
+    renderSessionPage();
   }
 
   function renderSessionPage() {
-    const s = findSession(openSession.date, openSession.id);
-    if (!s) { closeSessionPage(); return; }
-    const v = PlanStore.variantOf(s, openSession.variant) || PlanStore.variantOf(s, 'normal');
+    const hit = planIndex().get(openSession.id);
+    if (!hit) { closeSessionPage(); return; }
+    const s = hit.session;
+    const variantName = s.variants && s.variants[openSession.variant] ? openSession.variant : 'normal';
+    const v = PlanStore.variantOf(s, variantName);
+    const date = sessionDate(s.id);
+    const ctx = { s, date, plannedDate: hit.date, variantName, items: v.items };
+    const result = data.planLog.sessions[s.id] || null;
+    const page = $('#sessionPage');
+    const scroll = page.scrollTop;
+
     $('#sessionPageTitle').textContent = s.title;
     const body = $('#sessionBody');
     body.innerHTML = '';
 
-    const tags = el('div', { class: 'session-tags' }, el('span', { class: 'plan-week-line' }, formatDateLong(openSession.date)));
+    const tags = el('div', { class: 'session-tags' }, el('span', { class: 'plan-week-line' }, formatDateLong(date)));
+    if (date !== hit.date) tags.append(el('span', { class: 'plan-tag' }, `verschoben vom ${formatDayShort(hit.date)}`));
     if (s.optional) tags.append(el('span', { class: 'plan-tag' }, 'freiwillig'));
     if (s.testRound) tags.append(el('span', { class: 'plan-badge' }, `🧪 ${s.testRound}`));
+    const state = PlanLog.sessionState(result, date, todayKey(), s.optional);
+    if (state !== 'open') tags.append(stateChip(state));
     body.append(tags);
 
     const seg = el('div', { class: 'seg', role: 'tablist' });
-    for (const [name, label] of [['normal', 'Normal'], ['short', 'Kurz'], ['home', 'Zuhause']]) {
+    for (const [name, label] of Object.entries(VARIANT_LABELS)) {
       const btn = el('button', {
-        class: 'seg-btn' + (v.name === name ? ' active' : ''), type: 'button', role: 'tab',
-        onclick: () => { openSession.variant = name; renderSessionPage(); }
+        class: 'seg-btn' + (variantName === name ? ' active' : ''), type: 'button', role: 'tab',
+        onclick: () => switchVariant(ctx, name)
       }, label);
       if (!(s.variants && s.variants[name])) btn.disabled = true;
       seg.append(btn);
@@ -1966,38 +2082,337 @@
     body.append(info);
 
     const list = el('ol', { class: 'card session-items' });
-    for (const it of v.items) list.append(renderPlanItem(it));
+    v.items.forEach((_, idx) => list.append(renderPlanItem(ctx, idx)));
     body.append(list);
-    body.append(el('p', { class: 'hint session-footer' },
-      'Ergebnisse Satz für Satz eintragen: kommt mit dem nächsten Update.'));
+    body.append(renderSessionFinish(ctx, result));
+    page.scrollTop = scroll;
   }
 
-  function renderPlanItem(it) {
-    const li = el('li', { class: 'session-item' });
-    if (it.exercise != null) {
-      const ex = plan.exercises[it.exercise];
-      li.append(el('button', {
-        class: 'item-title-btn', type: 'button',
-        onclick: () => showExerciseInfo(it.exercise)
-      }, ex ? exerciseTitle(ex) : it.exercise));
-      const target = PlanStore.targetText(it);
-      if (target) li.append(el('div', { class: 'item-target' }, target));
-    } else if (it.test != null) {
-      const t = plan.tests[it.test];
-      li.classList.add('is-test');
-      li.append(el('button', {
-        class: 'item-title-btn', type: 'button',
-        onclick: () => showTestInfo(it.test)
-      }, `🧪 ${it.test}${t ? ' ' + t.name : ''}`));
-      if (t && t.target) li.append(el('div', { class: 'item-target' }, `Zielmarke: ${t.target.text}`));
-    } else {
-      li.classList.add('is-step');
-      li.append(el('div', { class: 'item-step' },
-        it.text + (it.minutes != null ? ` · ${PlanStore.minutesText(it.minutes)}` : '')));
-      if (it.input) li.append(el('div', { class: 'item-target' }, `✎ Notieren: ${it.input.label}`));
+  /* ---------- Eingabe-Bausteine ---------- */
+
+  function numField(value, unit, mode, onChange, label) {
+    const input = el('input', {
+      type: 'text', inputmode: mode, class: 'num-input', 'aria-label': label || unit,
+      value: value != null ? String(value).replace('.', ',') : ''
+    });
+    input.addEventListener('change', () => onChange(PlanLog.parseNum(input.value)));
+    return el('label', { class: 'num-field' }, input, el('span', { class: 'num-unit' }, unit));
+  }
+
+  function textField(value, placeholder, onChange) {
+    const input = el('input', { type: 'text', class: 'item-text-input', placeholder, maxlength: 120, 'aria-label': placeholder });
+    input.value = value || '';
+    input.addEventListener('change', () => onChange(input.value.trim()));
+    return input;
+  }
+
+  function effortSelect(value, onChange) {
+    const sel = el('select', { class: 'effort-select', 'aria-label': 'Anstrengung 1 bis 10' });
+    sel.append(el('option', { value: '' }, 'Anstrengung –'));
+    for (let n = 1; n <= 10; n++) {
+      const o = el('option', { value: String(n) }, `Anstrengung ${n}`);
+      if (value === n) o.selected = true;
+      sel.append(o);
     }
-    if (it.note) li.append(el('div', { class: 'item-note' }, it.note));
+    sel.addEventListener('change', () => onChange(sel.value === '' ? null : Number(sel.value)));
+    return sel;
+  }
+
+  const FEEL_ICONS = { hard: '😣', right: '👍', easy: '💪' };
+
+  function feelChips(value, onPick) {
+    const box = el('div', { class: 'feel-chips', role: 'group', 'aria-label': 'Wie war es?' });
+    for (const [k, label] of Object.entries(PlanLog.FEEL)) {
+      box.append(el('button', {
+        type: 'button', class: 'feel-chip' + (value === k ? ' active' : ''),
+        'aria-pressed': String(value === k), onclick: () => onPick(k)
+      }, `${FEEL_ICONS[k]} ${label}`));
+    }
+    return box;
+  }
+
+  function doneToggle(done, onToggle) {
+    return el('button', {
+      type: 'button', class: 'done-toggle' + (done ? ' is-done' : ''),
+      'aria-pressed': String(!!done), onclick: onToggle
+    }, done ? '✓ erledigt' : '○ abhaken');
+  }
+
+  /* ---------- Einträge ---------- */
+
+  function renderPlanItem(ctx, idx) {
+    const it = ctx.items[idx];
+    const li = el('li', { class: 'session-item' });
+    if (it.exercise != null) renderExerciseItem(li, ctx, idx, it);
+    else if (it.test != null) renderTestItem(li, it);
+    else renderStepItem(li, ctx, idx, it);
     return li;
+  }
+
+  function renderTestItem(li, it) {
+    const t = plan.tests[it.test];
+    li.classList.add('is-test');
+    li.append(el('button', {
+      class: 'item-title-btn', type: 'button',
+      onclick: () => showTestInfo(it.test)
+    }, `🧪 ${it.test}${t ? ' ' + t.name : ''}`));
+    if (t && t.target) li.append(el('div', { class: 'item-target' }, `Zielmarke: ${t.target.text}`));
+    if (it.note) li.append(el('div', { class: 'item-note' }, it.note));
+    li.append(el('div', { class: 'item-note' }, 'Test-Werte eintragen: kommt mit dem nächsten Update (vor dem Eingangstest).'));
+  }
+
+  function renderStepItem(li, ctx, idx, it) {
+    const res = itemView(ctx, idx);
+    li.classList.add('is-step');
+    if (res.done) li.classList.add('is-done');
+    li.append(el('div', { class: 'item-step' },
+      it.text + (it.minutes != null ? ` · ${PlanStore.minutesText(it.minutes)}` : '')));
+    if (it.note) li.append(el('div', { class: 'item-note' }, it.note));
+    if (it.input) {
+      if (it.input.type === 'text') {
+        li.append(textField(res.value, it.input.label, (v) =>
+          mutateItem(ctx, idx, (r) => { r.value = v || null; if (v) r.done = true; })));
+      } else {
+        li.append(el('div', { class: 'set-rows' }, el('div', { class: 'set-row' },
+          numField(res.value, it.input.label, 'decimal', (v) =>
+            mutateItem(ctx, idx, (r) => { r.value = v; if (v != null) r.done = true; }), it.input.label))));
+      }
+    }
+    li.append(doneToggle(res.done, () => mutateItem(ctx, idx, (r) => { r.done = !r.done; })));
+  }
+
+  function renderExerciseItem(li, ctx, idx, it) {
+    const ex = plan.exercises[it.exercise];
+    const kind = PlanLog.kindOf(ex);
+    const res = itemView(ctx, idx);
+
+    li.append(el('button', {
+      class: 'item-title-btn', type: 'button',
+      onclick: () => showExerciseInfo(it.exercise)
+    }, ex ? exerciseTitle(ex) : it.exercise));
+    const target = PlanStore.targetText(it);
+    if (target) li.append(el('div', { class: 'item-target' }, target));
+    if (it.note) li.append(el('div', { class: 'item-note' }, it.note));
+
+    if (kind === 'block' || kind === 'other') {
+      if (res.done) li.classList.add('is-done');
+      li.append(doneToggle(res.done, () => mutateItem(ctx, idx, (r) => { r.done = !r.done; })));
+      if (kind === 'other') li.append(textField(res.note, 'Notiz', (v) => mutateItem(ctx, idx, (r) => { r.note = v; }, false)));
+      return;
+    }
+
+    const last = PlanLog.lastExerciseResult(data.planLog, it.exercise, ctx.s.id, ctx.date);
+    if (last) {
+      li.append(el('div', { class: 'item-last' }, `↩ Letztes Mal (${formatDayShort(last.date)}): ${PlanLog.lastText(last.item)}`));
+    }
+
+    if (kind === 'cardio') renderCardio(li, ctx, idx, res);
+    else renderRows(li, ctx, idx, it, ex, kind, res);
+
+    if (kind === 'strength' || kind === 'hold') {
+      li.append(textField(res.variant, 'Variante, z. B. Hände auf Stufe', (v) =>
+        mutateItem(ctx, idx, (r) => { r.variant = v; }, false)));
+    }
+    if (kind === 'climb') {
+      li.append(textField(res.note, 'Notiz, z. B. Grad/Farbe, Anzahl', (v) =>
+        mutateItem(ctx, idx, (r) => { r.note = v; }, false)));
+    }
+    if (kind === 'stairs' || kind === 'climb') {
+      li.append(effortSelect(res.effort, (v) => mutateItem(ctx, idx, (r) => { r.effort = v; }, false)));
+    }
+    li.append(feelChips(res.feel, (k) => mutateItem(ctx, idx, (r) => { r.feel = r.feel === k ? null : k; })));
+  }
+
+  function renderRows(li, ctx, idx, it, ex, kind, res) {
+    const metric = PlanLog.metricOf(it, ex);
+    const unit = PlanLog.UNITS[metric];
+    const mode = metric === 'reps' ? 'numeric' : 'decimal';
+    const allDone = res.rows.length > 0 && res.rows.every((x) => x.done);
+    if (allDone) li.classList.add('is-done');
+
+    const box = el('div', { class: 'set-rows' });
+    res.rows.forEach((row, i) => {
+      const line = el('div', { class: 'set-row' + (row.done ? ' is-done' : '') });
+      line.append(el('span', { class: 'set-no', 'aria-hidden': 'true' }, String(i + 1)));
+      line.append(numField(row[metric], unit, mode,
+        (v) => mutateItem(ctx, idx, (r) => { r.rows[i][metric] = v; }, false), `Satz ${i + 1}: ${unit}`));
+      if (ex && ex.load) {
+        line.append(numField(row.kg, 'kg', 'decimal',
+          (v) => mutateItem(ctx, idx, (r) => { r.rows[i].kg = v; }, false), `Satz ${i + 1}: kg`));
+      }
+      if (kind === 'stairs') {
+        line.append(numField(row.rounds, 'Durchg.', 'numeric',
+          (v) => mutateItem(ctx, idx, (r) => { r.rows[i].rounds = v; }, false), `Satz ${i + 1}: Durchgänge`));
+      }
+      line.append(el('button', {
+        type: 'button', class: 'set-check' + (row.done ? ' is-done' : ''),
+        'aria-pressed': String(row.done),
+        'aria-label': row.done ? `Satz ${i + 1} zurücknehmen` : `Satz ${i + 1} bestätigen`,
+        onclick: () => {
+          let missing = false;
+          mutateItem(ctx, idx, (r) => {
+            const x = r.rows[i];
+            if (!x.done && x[metric] == null) { missing = true; return; }
+            x.done = !x.done;
+          });
+          if (missing) toast('Bitte zuerst einen Wert eintragen');
+        }
+      }, '✓'));
+      box.append(line);
+    });
+    li.append(box);
+
+    const actions = el('div', { class: 'set-actions' });
+    if (!allDone) {
+      actions.append(el('button', {
+        type: 'button', class: 'link-btn',
+        onclick: () => mutateItem(ctx, idx, (r) => { r.rows.forEach((x) => { if (x[metric] != null) x.done = true; }); })
+      }, '✓ Alle bestätigen'));
+    }
+    actions.append(el('button', {
+      type: 'button', class: 'link-btn',
+      onclick: () => mutateItem(ctx, idx, (r) => {
+        const lastRow = r.rows[r.rows.length - 1] || {};
+        r.rows.push(Object.assign({}, lastRow, { done: false }));
+      })
+    }, '+ Satz'));
+    if (res.rows.length > (it.sets || 1)) {
+      actions.append(el('button', {
+        type: 'button', class: 'link-btn',
+        onclick: () => mutateItem(ctx, idx, (r) => { r.rows.pop(); })
+      }, '− Satz'));
+    }
+    li.append(actions);
+  }
+
+  function renderCardio(li, ctx, idx, res) {
+    const c = res.cardio;
+    if (c.done) li.classList.add('is-done');
+    li.append(el('div', { class: 'cardio-grid' },
+      numField(c.minutes, 'Min.', 'decimal', (v) => mutateItem(ctx, idx, (r) => { r.cardio.minutes = v; }, false), 'Dauer in Minuten'),
+      numField(c.km, 'km', 'decimal', (v) => mutateItem(ctx, idx, (r) => { r.cardio.km = v; }, false), 'Strecke in km'),
+      numField(c.pulse, 'Ø-Puls', 'numeric', (v) => mutateItem(ctx, idx, (r) => { r.cardio.pulse = v; }, false), 'Durchschnittspuls')));
+    li.append(effortSelect(c.effort, (v) => mutateItem(ctx, idx, (r) => { r.cardio.effort = v; }, false)));
+    li.append(el('button', {
+      type: 'button', class: 'btn btn-block ' + (c.done ? 'btn-done' : 'btn-primary'),
+      'aria-pressed': String(!!c.done),
+      onclick: () => {
+        let missing = false;
+        mutateItem(ctx, idx, (r) => {
+          if (!r.cardio.done && r.cardio.minutes == null) { missing = true; return; }
+          r.cardio.done = !r.cardio.done;
+        });
+        if (missing) toast('Bitte zuerst die Dauer eintragen');
+      }
+    }, c.done ? '✓ Bestätigt (antippen zum Zurücknehmen)' : '✓ Bestätigen'));
+  }
+
+  /* ---------- Abschluss ---------- */
+
+  function renderSessionFinish(ctx, result) {
+    const status = result ? result.status : null;
+    const card = el('div', { class: 'card session-finish' },
+      el('div', { class: 'card-head' }, el('h2', null, 'Abschluss')));
+    const btns = el('div', { class: 'status-btns' });
+    for (const [k, label] of [['done', '✓ Erledigt'], ['partial', '◐ Teilweise'], ['skipped', '✕ Ausgelassen']]) {
+      btns.append(el('button', {
+        type: 'button', class: `status-btn status-${k}` + (status === k ? ' active' : ''),
+        'aria-pressed': String(status === k),
+        onclick: () => setSessionStatus(ctx, status === k ? null : k)
+      }, label));
+    }
+    card.append(btns);
+    card.append(el('div', { class: 'finish-row' },
+      effortSelect(result ? result.effort : null, (v) => mutateSession(ctx, (r) => { r.effort = v; }, false)),
+      numField(result ? result.minutes : null, 'Min. gesamt', 'numeric',
+        (v) => mutateSession(ctx, (r) => { r.minutes = v; }, false), 'Tatsächliche Dauer in Minuten')));
+    const ta = el('textarea', { class: 'finish-note', rows: 2, maxlength: 500, placeholder: 'Notiz zur Einheit (optional)', 'aria-label': 'Notiz zur Einheit' });
+    ta.value = result ? result.note || '' : '';
+    ta.addEventListener('change', () => mutateSession(ctx, (r) => { r.note = ta.value.trim(); }, false));
+    card.append(ta);
+    return card;
+  }
+
+  function setSessionStatus(ctx, status) {
+    mutateSession(ctx, (r) => { r.status = status; });
+    if (status === 'done') toast('Einheit gespeichert 💪');
+    else if (status === 'partial') toast('Als teilweise gespeichert');
+    else if (status === 'skipped') toast('Als ausgelassen markiert');
+  }
+
+  /* ---------- Verschieben / Tauschen ---------- */
+
+  let moveId = null;
+
+  function openMoveDialog(id) {
+    const hit = planIndex().get(id);
+    if (!hit) return;
+    moveId = id;
+    const cur = sessionDate(id);
+    $('#moveInfo').textContent = `„${hit.session.title}“ liegt am ${formatDateLong(cur)}` +
+      (cur !== hit.date ? ` (geplant war ${formatDateLong(hit.date)}).` : '.');
+    const quick = $('#moveQuick');
+    quick.innerHTML = '';
+    const options = [];
+    if (cur !== hit.date) options.push([hit.date, `Zurück auf ${formatDayShort(hit.date)}`]);
+    for (const a of hit.session.altDates || []) if (a !== cur) options.push([a, `Auf ${formatDayShort(a)}`]);
+    for (const [d, label] of options) {
+      quick.append(el('button', {
+        type: 'button', class: 'btn',
+        onclick: () => { $('#moveDate').value = d; updateMoveDialog(); }
+      }, label));
+    }
+    const b = PlanStore.bounds(plan);
+    const input = $('#moveDate');
+    input.min = b.first;
+    input.max = b.last;
+    input.value = options.length ? options[0][0] : cur;
+    updateMoveDialog();
+    $('#moveDialog').showModal();
+  }
+
+  function updateMoveDialog() {
+    const to = $('#moveDate').value;
+    const from = sessionDate(moveId);
+    const actions = $('#moveActions');
+    const conflict = $('#moveConflict');
+    actions.innerHTML = '';
+    conflict.textContent = '';
+    actions.append(el('button', { type: 'button', class: 'btn', onclick: () => $('#moveDialog').close() }, 'Abbrechen'));
+    if (!to) return;
+    if (to === from) { conflict.textContent = 'Die Einheit liegt schon an diesem Tag.'; return; }
+    const others = sessionsOnDate(to).filter((e) => e.session.id !== moveId);
+    if (others.length) {
+      conflict.textContent = `Am ${formatDayShort(to)} liegt schon „${others.map((o) => o.session.title).join('“, „')}“. ` +
+        'Tauschen legt sie auf den bisherigen Tag.';
+      actions.append(
+        el('button', { type: 'button', class: 'btn', onclick: () => doMove(to, false) }, 'Dazulegen'),
+        el('button', { type: 'button', class: 'btn btn-primary', onclick: () => doMove(to, true) }, 'Tauschen'));
+    } else {
+      actions.append(el('button', { type: 'button', class: 'btn btn-primary', onclick: () => doMove(to, false) }, 'Verschieben'));
+    }
+  }
+
+  function doMove(to, swap) {
+    const id = moveId;
+    const from = sessionDate(id);
+    let moves = data.planMoves;
+    if (swap) {
+      for (const o of sessionsOnDate(to)) {
+        if (o.session.id !== id) moves = PlanLog.applyMove(moves, planIndex(), o.session.id, from);
+      }
+    }
+    data.planMoves = PlanLog.applyMove(moves, planIndex(), id, to);
+    // Ergebnisse wandern mit ihrer Einheit
+    for (const r of Object.values(data.planLog.sessions)) {
+      const d = sessionDate(r.sessionId);
+      if (d) r.date = d;
+    }
+    save();
+    $('#moveDialog').close();
+    toast(swap ? 'Einheiten getauscht' : `Verschoben auf ${formatDayShort(to)}`);
+    renderAll();
+    if (openSession) renderSessionPage();
   }
 
   /* ---------- Spickzettel ---------- */
@@ -2104,19 +2519,26 @@
     const today = todayKey();
     for (const d of PlanStore.weekDates(plan, w.id)) {
       const day = plan.days[d];
+      const entries = sessionsOnDate(d);
       let title = 'frei';
       let places = '';
       let optional = false;
-      if (day && day.sessions.length) {
-        title = day.sessions.map((s) => s.title).join(' + ');
-        places = [...new Set(day.sessions.flatMap((s) => s.place || []))].join(' ');
-        optional = day.sessions.every((s) => s.optional);
+      const stateIcons = el('span', { class: 'week-day-state' });
+      if (entries.length) {
+        title = entries.map((e) => e.session.title).join(' + ');
+        places = [...new Set(entries.flatMap((e) => e.session.place || []))].join(' ');
+        optional = entries.every((e) => e.session.optional);
+        for (const e of entries) {
+          const state = PlanLog.sessionState(data.planLog.sessions[e.session.id], d, today, e.session.optional);
+          const st = PlanLog.STATES[state];
+          stateIcons.append(el('span', { class: `state-icon state-${state}`, title: st.label, 'aria-label': st.label }, st.icon));
+        }
       } else if (day && day.rest) {
         title = '😌 Ruhetag';
       }
       const cls = ['week-day'];
       if (d === today) cls.push('is-today');
-      if (!day || !day.sessions.length) cls.push('is-free');
+      if (!entries.length) cls.push('is-free');
       const row = el('button', {
         class: cls.join(' '), type: 'button',
         onclick: () => { currentKey = d; switchView('today'); }
@@ -2125,7 +2547,8 @@
         el('span', { class: 'week-day-title' }, title,
           optional ? el('span', { class: 'plan-tag' }, 'freiwillig') : null,
           day && day.highlight ? el('span', { class: 'plan-badge' }, day.highlight) : null),
-        el('span', { class: 'week-day-place' }, places));
+        el('span', { class: 'week-day-place' }, places),
+        stateIcons);
       box.append(row);
     }
   }
@@ -2236,6 +2659,7 @@
     const previous = plan;
     plan = PlanStore.applyImport(plan, pendingPlan, todayKey());
     if (!savePlan()) { plan = previous; return; }
+    planIndexCache = null;
     pendingPlan = null;
     planWeekId = null;
     $('#planImportDialog').close();
@@ -2469,6 +2893,8 @@
     document.querySelectorAll('#planContent .seg-btn').forEach((b) =>
       b.addEventListener('click', () => { planSeg = b.dataset.seg; renderPlanTab(); }));
     $('#sessionBack').addEventListener('click', () => history.back());
+    $('#moveDate').addEventListener('change', updateMoveDialog);
+    $('#sessionMove').addEventListener('click', () => { if (openSession) openMoveDialog(openSession.id); });
     window.addEventListener('popstate', () => {
       if (!$('#sessionPage').hidden) closeSessionPage();
     });

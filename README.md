@@ -61,5 +61,5 @@ Pages, Cloudflare Pages, Netlify – alle kostenlos für statische Seiten).
   **Plan** importiert. Format: [specs/format-trainingsplan-v1.md](specs/format-trainingsplan-v1.md),
   Feature: [specs/001-trainingsplan.md](specs/001-trainingsplan.md).
 - Plan-Datei am PC prüfen: `node tools/check-plan.js <datei.json>`
-- Automatische Tests der Plan-Logik: `node --test tests/plan-store.test.js`
+- Automatische Tests der Plan-Logik: `node --test tests/plan-store.test.js tests/plan-log.test.js`
 - Echte Plan-Dateien und Trainingsprotokolle **nie** ins Repo legen.

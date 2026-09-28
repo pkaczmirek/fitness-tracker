@@ -405,11 +405,25 @@
     </div>
   </dialog>
 
+  <dialog id="moveDialog">
+    <div class="dialog-form">
+      <h3>Einheit verschieben</h3>
+      <p class="hint" id="moveInfo"></p>
+      <div class="quick-btns" id="moveQuick"></div>
+      <label>Auf diesen Tag
+        <input type="date" id="moveDate">
+      </label>
+      <p class="hint" id="moveConflict"></p>
+      <div class="dialog-btns" id="moveActions"></div>
+    </div>
+  </dialog>
+
   <!-- Einheit: eigene Seite über allem -->
   <div id="sessionPage" class="page" hidden>
     <div class="page-header">
       <button class="icon-btn" id="sessionBack" aria-label="Zurück">‹</button>
       <div class="page-title" id="sessionPageTitle"></div>
+      <button class="icon-btn page-action" id="sessionMove" aria-label="Einheit verschieben" title="Verschieben">📅</button>
     </div>
     <div class="page-body" id="sessionBody"></div>
   </div>
@@ -424,6 +438,7 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="js/plan-check.js"></script>
   <script src="js/plan-store.js"></script>
+  <script src="js/plan-log.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

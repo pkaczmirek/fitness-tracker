@@ -850,3 +850,146 @@ body.page-open { overflow: hidden; }
 .lib-label { min-width: 52px; font-size: 0.78rem; font-weight: 700; color: var(--ink-muted); }
 .lib-name { flex: 1; font-size: 0.92rem; }
 .guide-text { font-size: 0.9rem; line-height: 1.5; white-space: pre-line; color: var(--ink-2); }
+
+/* ===== Trainingsplan: Eintragen (Schritt 2) ===== */
+.state-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-top: 6px;
+  background: var(--grid);
+  color: var(--ink-2);
+}
+.session-tags .state-chip { margin-top: 0; }
+.state-done { color: var(--good); }
+.state-partial, .state-started { color: var(--primary); }
+.state-missed { color: var(--danger); }
+.state-skipped, .state-none, .state-open { color: var(--ink-muted); }
+
+.week-day { grid-template-columns: 78px 1fr auto auto; }
+.week-day-state { display: inline-flex; gap: 4px; font-weight: 800; min-width: 14px; justify-content: flex-end; }
+
+.page-action { margin-left: auto; flex-shrink: 0; font-size: 1.1rem; }
+
+.session-item.is-done::before { content: '✓'; background: var(--good); color: #fff; }
+
+.item-last {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  background: var(--grid);
+  border-radius: 8px;
+  padding: 5px 8px;
+  margin-top: 6px;
+}
+
+.set-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.set-row { display: flex; align-items: center; gap: 8px; }
+.set-no {
+  width: 18px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  text-align: center;
+}
+.num-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+.num-input {
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  width: 64px;
+  padding: 7px 8px;
+  border: 1px solid var(--baseline);
+  border-radius: 9px;
+  background: var(--surface-1);
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.set-row.is-done .num-input { border-color: var(--good); background: transparent; }
+.set-check {
+  margin-left: auto;
+  width: 40px;
+  height: 36px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  border: 1px solid var(--baseline);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.set-check.is-done { background: var(--good); border-color: var(--good); color: #fff; }
+
+.set-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+
+.cardio-grid { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; }
+
+.effort-select, .item-text-input, .finish-note {
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--ink-1);
+  background: var(--surface-1);
+  border: 1px solid var(--baseline);
+  border-radius: 9px;
+  padding: 7px 8px;
+  margin-top: 8px;
+}
+.item-text-input, .finish-note { display: block; width: 100%; }
+
+.feel-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.feel-chip {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--baseline);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.feel-chip.active { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+
+.done-toggle {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 8px;
+  border: 1px solid var(--baseline);
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.done-toggle.is-done { background: var(--good); border-color: var(--good); color: #fff; }
+
+.btn-done { background: var(--good); border-color: var(--good); color: #fff; }
+.session-item .btn-block { margin-top: 8px; }
+
+.status-btns { display: flex; gap: 6px; }
+.status-btn {
+  flex: 1;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid var(--baseline);
+  border-radius: 10px;
+  padding: 10px 4px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.status-btn.status-done.active { background: var(--good); border-color: var(--good); color: #fff; }
+.status-btn.status-partial.active { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.status-btn.status-skipped.active { background: var(--ink-2); border-color: var(--ink-2); color: var(--surface-1); }
+.finish-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.finish-row .num-field { margin-top: 8px; }

@@ -2,8 +2,8 @@
 
 Status: 2026-09-28: Format festgelegt
 ([format-trainingsplan-v1.md](format-trainingsplan-v1.md)), Fragen geklärt
-(Abschnitt 8). **Schritt 1 umgesetzt (App-Version 14), wartet auf Abnahme
-durch den Nutzer.** Nächster Schritt: 2 (Eintragen).
+(Abschnitt 8). **Schritt 1 abgenommen (Version 14). Schritt 2 umgesetzt (Version 15),
+wartet auf Abnahme.** Nächster Schritt: 3 (Tests, bis 12.10.).
 
 Gegenstück im Trainingsplan-Projekt:
 `D:\dev\Trainingsplan\specs\004-app-anbindung.md`

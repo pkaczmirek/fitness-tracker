@@ -1,5 +1,5 @@
 /* Service Worker – App-Shell offline verfügbar machen */
-const CACHE = 'fitness-tracker-v14';
+const CACHE = 'fitness-tracker-v15';
 
 const ASSETS = [
   './',
@@ -8,6 +8,7 @@ const ASSETS = [
   './js/app.js',
   './js/plan-check.js',
   './js/plan-store.js',
+  './js/plan-log.js',
   './vendor/xlsx.full.min.js',
   './manifest.webmanifest',
   './icons/icon.svg',
