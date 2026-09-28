@@ -1,0 +1,403 @@
+{
+  "format": "trainingsplan",
+  "formatVersion": 1,
+  "planId": "beispiel-startpaket",
+  "title": "Beispiel: Auszug aus dem Startpaket",
+  "createdAt": "2026-09-28",
+  "range": { "from": "2026-10-01", "to": "2026-10-18" },
+  "event": { "name": "XLETIX Challenge Tirol X-treme", "date": "2027-06-26" },
+
+  "places": {
+    "Z": "zu Hause (inkl. Treppe im Haus)",
+    "S": "Fitnessstudio",
+    "B": "Boulderhalle",
+    "P": "Park mit Hangelleiter",
+    "T": "Treppe draußen (20 Stufen)",
+    "L": "Laufstrecke",
+    "W": "Berge/Hügel"
+  },
+
+  "guides": [
+    {
+      "id": "effort",
+      "title": "Anstrengungsskala 1–10",
+      "text": "1–2 sehr leicht: wie Spazierengehen\n3–4 leicht: du kannst dich mühelos unterhalten\n5–6 mittel: ganze Sätze gehen noch, aber du merkst die Atmung\n7–8 hart: nur noch einzelne Worte\n9–10 maximal: Sprechen geht nicht mehr\n\nIm Startpaket: Läufe bei 3–4, Kraft und Hängen höchstens 6. Nur die Tests dürfen höher gehen."
+    },
+    {
+      "id": "rules",
+      "title": "Grundregeln",
+      "text": "Nie bis zur Erschöpfung: Am Ende jeder Übung noch 2–3 Wiederholungen bzw. einige Sekunden „im Tank“. Ausnahme: die Tests.\nMuskelkater ist normal, Schmerz nicht: Stechender Schmerz oder Schmerz in Gelenken, Sehnen oder Fingern → Übung abbrechen und beim nächsten Mal leichter machen.\nFinger und Sehnen brauchen Zeit: Am Anfang beim Hängen und Klettern besonders zurückhaltend sein."
+    },
+    {
+      "id": "dogwalk",
+      "title": "Hundespaziergang-Zusatz",
+      "text": "2× pro Spaziergang je Bein 30 s auf einem Bein stehen (Ü25, Trittsicherheit). Wenn es leicht wird: dabei den Kopf drehen oder die Augen kurz schließen."
+    }
+  ],
+
+  "exercises": [
+    { "id": "A1", "label": "A1", "name": "Aufwärmen Kraft", "kind": "block", "group": "Bausteine",
+      "howTo": "1 Min. auf der Stelle gehen bzw. Treppe locker hoch und runter · 10× Armkreisen vor und zurück · 10× Schulterkreisen · 10 Kniebeugen · 10 Ausfallschritte · 2× 10 s locker an der Stange hängen" },
+    { "id": "A2", "label": "A2", "name": "Aufwärmen Lauf", "kind": "block", "group": "Bausteine",
+      "howTo": "5 Min. zügig gehen, dann locker loslaufen." },
+    { "id": "D", "label": "D", "name": "Dehnen", "kind": "block", "group": "Bausteine",
+      "howTo": "Oberschenkel vorn und hinten, Waden, Hüftbeuger (Ausfallschritt-Stellung, Hüfte nach vorn schieben), Brust (Arm in den Türrahmen), Unterarme. Je 30 s pro Seite, ruhig atmen." },
+
+    { "id": "U1", "label": "Ü1", "name": "Totes Hängen", "kind": "hold", "group": "Hängen und Zug",
+      "howTo": "An die Stange springen oder greifen, schulterbreit, Daumen um die Stange. Arme ganz lang, Beine zusammen, ruhig hängen.",
+      "watch": "Schultern leicht nach unten ziehen, nicht „in den Ohren“ hängen.",
+      "harder": "Länger, dann nasse Hände (ab Phase 2), dann Handtücher" },
+    { "id": "U2", "label": "Ü2", "name": "Schulterblatt-Züge", "kind": "strength", "group": "Hängen und Zug",
+      "howTo": "Im Totes-Hängen nur die Schultern nach unten ziehen: Die Arme bleiben gestreckt, der Körper steigt ein paar Zentimeter. Wieder locker lassen.",
+      "watch": "Arme nicht beugen. Kleine, ruhige Bewegung." },
+    { "id": "U3c", "label": "Ü3c", "name": "Halten im gebeugten Arm", "kind": "hold", "group": "Hängen und Zug",
+      "howTo": "Mit einem Sprung oder von einem Stuhl in die Position mit gebeugten Armen, Kinn auf Augenhöhe. So halten.",
+      "watch": "Schultern unten, Bauch fest. Kontrolliert herunterlassen.",
+      "harder": "Länger halten, dann Teil-Negative" },
+    { "id": "U5", "label": "Ü5", "name": "Handtuch-Hängen", "kind": "hold", "group": "Hängen und Zug",
+      "howTo": "Zwei Handtücher über die Stange legen, je ein Handtuch mit einer Hand fest umfassen und daran hängen.",
+      "watch": "Schwerer als die Stange, deshalb kürzer halten.",
+      "harder": "Länger, dann ein Handtuch dicker falten" },
+    { "id": "U10", "label": "Ü10", "name": "Hängendes Knieheben", "kind": "strength", "group": "Hängen und Zug",
+      "howTo": "Im Hang die Knie langsam zur Brust ziehen und langsam wieder ablassen.",
+      "watch": "Nicht schaukeln. Lieber weniger Wiederholungen, dafür kontrolliert.",
+      "harder": "Knie höher, dann Beine gestreckt" },
+
+    { "id": "U26-UAS", "label": "Ü26", "name": "Unterarmstütz", "kind": "hold", "group": "Rumpf",
+      "howTo": "Auf Unterarmen und Zehenspitzen, Ellbogen unter den Schultern. Körper gerade wie ein Brett.",
+      "watch": "Po nicht hoch, Hüfte nicht durchhängen lassen. Normal weiteratmen.",
+      "harder": "Länger, dann ein Bein anheben" },
+    { "id": "U26-SEIT", "label": "Ü26", "name": "Seitlicher Stütz", "kind": "hold", "group": "Rumpf",
+      "howTo": "Auf der Seite liegen, auf einen Unterarm stützen (Ellbogen unter der Schulter), Hüfte anheben, bis der Körper eine gerade Linie bildet.",
+      "watch": "Hüfte oben halten, nicht nach vorn kippen. Leichter: die Knie auflegen.",
+      "harder": "Länger, dann oberes Bein anheben" },
+    { "id": "HOHL", "name": "Hohlkörper-Halten", "kind": "hold", "group": "Rumpf",
+      "howTo": "Rückenlage, Arme über den Kopf strecken. Schultern und gestreckte Beine knapp vom Boden heben.",
+      "watch": "Der untere Rücken bleibt fest am Boden. Wenn er sich hebt: Knie anwinkeln oder Beine höher.",
+      "harder": "Beine tiefer, Arme weiter nach hinten" },
+
+    { "id": "U8", "label": "Ü8", "name": "Quergänge", "kind": "climb", "group": "Klettern",
+      "howTo": "Nah am Boden seitlich an der Wand entlang klettern, ohne abzusteigen.",
+      "watch": "Füße bewusst auf die Tritte setzen, mit der Fußspitze. Hüfte nah an der Wand. Die Beine tragen, die Arme halten." },
+    { "id": "U9", "label": "Ü9", "name": "Überhang-Bouldern", "kind": "climb", "group": "Klettern",
+      "howTo": "Die leichtesten Boulder an der nach hinten geneigten Wand.",
+      "watch": "Arme lang, Hüfte zur Wand, Füße nie lösen. Erst Fuß hoch, dann mit dem Bein „aufstehen“, dann greifen. Seitlich eindrehen." },
+
+    { "id": "WALK", "name": "Zügiger Spaziergang", "kind": "cardio", "group": "Beine, Treppe, Laufen",
+      "howTo": "Zügig gehen, gern mit dem Hund." },
+    { "id": "U20", "label": "Ü20", "name": "Lockerer Lauf", "kind": "cardio", "group": "Beine, Treppe, Laufen",
+      "howTo": "Laufen im Sprechtempo (3–4/10). Gehpausen sind erlaubt.",
+      "watch": "Lieber zu langsam als zu schnell. Die Dauer zählt, nicht das Tempo." },
+    { "id": "U22-23", "label": "Ü22/Ü23", "name": "Treppe hoch und runter", "kind": "stairs", "group": "Beine, Treppe, Laufen",
+      "howTo": "Gleichmäßig Stufe für Stufe nach oben gehen, kontrolliert mit kurzen Schritten nach unten.",
+      "watch": "Hoch: Oberkörper leicht nach vorn, ruhig atmen. Runter: Knie leicht gebeugt, nicht „in die Stufe fallen lassen“. Am Geländer festhalten ist erlaubt." },
+    { "id": "U24", "label": "Ü24", "name": "Langsame Step-downs", "kind": "strength", "load": true, "group": "Beine, Treppe, Laufen",
+      "howTo": "Auf der untersten Stufe stehen. Ein Bein nach vorn in die Luft, mit dem Standbein in 3 Sekunden langsam in die Knie gehen, bis die Ferse des freien Beins den Boden antippt. Wieder hoch.",
+      "watch": "Das Knie zeigt über die Fußspitze, knickt nicht nach innen. Zum Festhalten ans Geländer.",
+      "harder": "Rucksack" },
+    { "id": "U16", "label": "Ü16", "name": "Kniebeugen", "kind": "strength", "load": true, "group": "Beine, Treppe, Laufen",
+      "howTo": "Füße schulterbreit, Po nach hinten und unten, als wolltest du dich auf einen Stuhl setzen. Wieder aufstehen.",
+      "watch": "Fersen bleiben am Boden, Rücken gerade, Knie zeigen in Richtung der Zehen." },
+    { "id": "U25", "label": "Ü25", "name": "Einbeinstand", "kind": "hold", "group": "Beine, Treppe, Laufen",
+      "howTo": "Auf einem Bein stehen, das andere leicht anheben.",
+      "watch": "Leicht gebeugtes Standknie.",
+      "harder": "Augen kurz zu oder Kopf drehen" }
+  ],
+
+  "tests": [
+    { "id": "T1", "name": "Totes Hängen trocken", "goal": "F3",
+      "howTo": "Stange zu Hause, schulterbreit, Daumen um die Stange, Arme lang, Schultern aktiv. Hängen, bis die Finger aufgehen.",
+      "fields": [ { "key": "seconds", "label": "Sekunden", "type": "seconds" } ],
+      "main": "seconds", "better": "higher", "target": { "text": "60 s", "value": 60 } },
+    { "id": "T2", "name": "Totes Hängen nass", "goal": "F3",
+      "howTo": "Wie T1, vorher Hände 30 s in einen Eimer kaltes Wasser, nicht abtrocknen.",
+      "fields": [ { "key": "seconds", "label": "Sekunden", "type": "seconds" } ],
+      "main": "seconds", "better": "higher", "target": { "text": "45 s", "value": 45 } },
+    { "id": "T3b", "name": "Halten im gebeugten Arm", "goal": "F5",
+      "howTo": "Stange zu Hause, mit Sprung in die Position (Kinn auf Augenhöhe), halten, bis du absinkst.",
+      "fields": [ { "key": "seconds", "label": "Sekunden", "type": "seconds" } ],
+      "main": "seconds", "better": "higher" },
+    { "id": "T5", "name": "Unterarmstütz", "goal": "F8",
+      "howTo": "Auf Unterarmen und Zehen, Körper gerade wie ein Brett. Halten, bis die Hüfte absinkt oder nach oben geht. Höchstens 3 Min.",
+      "fields": [ { "key": "seconds", "label": "Sekunden", "type": "seconds" } ],
+      "main": "seconds", "better": "higher" },
+    { "id": "T6", "name": "30-Minuten-Lauf", "goal": "F1",
+      "howTo": "Immer dieselbe flache Strecke, 30 Min. im Sprechtempo (3–4/10).",
+      "note": "Kein Tempotest! Fortschritt = mehr km bei gleichem Gefühl bzw. weniger Puls.",
+      "fields": [
+        { "key": "km", "label": "Strecke (km)", "type": "km" },
+        { "key": "pulse", "label": "Ø-Puls", "type": "bpm" },
+        { "key": "walkBreaks", "label": "Gehpausen", "type": "yesno" }
+      ],
+      "main": "km", "better": "higher" },
+    { "id": "T7", "name": "Treppen-Test", "goal": "F2, F4",
+      "howTo": "Treppe draußen, 5 Min. ruhig hoch und runter bei 5/10. Durchgänge zählen. Am nächsten Tag: Muskelkater Oberschenkel 0–10 nachtragen.",
+      "fields": [
+        { "key": "rounds", "label": "Durchgänge", "type": "number" },
+        { "key": "soreness", "label": "Muskelkater am Folgetag (0–10)", "type": "scale10" }
+      ],
+      "main": "rounds", "better": "higher" },
+    { "id": "T8a", "name": "Quergang", "goal": "F3, F6",
+      "howTo": "Boulderhalle, senkrechte Wand, nah am Boden seitlich klettern, ohne abzusteigen.",
+      "fields": [ { "key": "time", "label": "Zeit (min:s)", "type": "minsec" } ],
+      "main": "time", "better": "higher", "target": { "text": "3 Min.", "value": 180 } },
+    { "id": "T8b", "name": "Überhang-Check", "goal": "F6 · Insane Invert",
+      "howTo": "20 Min. die leichtesten Überhang-Boulder. Notieren: welcher Schwierigkeitsgrad bzw. welche Farbe, wie viele sauber geschafft, ob ein Fuß ungewollt abrutscht.",
+      "fields": [
+        { "key": "grade", "label": "Grad/Farbe", "type": "text" },
+        { "key": "count", "label": "sauber geschafft", "type": "number" },
+        { "key": "note", "label": "Notiz (Fuß abgerutscht?)", "type": "text" }
+      ],
+      "main": "count", "better": "higher" }
+  ],
+
+  "weeks": [
+    { "id": "SP0", "title": "Einstiegstage", "phase": "Startpaket", "types": ["intro"], "start": "2026-10-01",
+      "note": "Alles freiwillig. Nur, wenn du dich gut fühlst." },
+    { "id": "SP1", "title": "Woche 1: Gewöhnung", "phase": "Startpaket", "types": ["intro"], "start": "2026-10-05",
+      "goal": "Jede Art von Einheit einmal machen: zu Hause, Lauf, Boulderhalle, Treppe und lang. Merken, wie lange die Wege dauern und was sich gut anfühlt." },
+    { "id": "SP2", "title": "Woche 2: Eingangstest", "phase": "Startpaket", "types": ["intro", "test"], "start": "2026-10-12",
+      "goal": "Den Eingangstest machen. Er ist auf 4 Tage verteilt, damit sich die Tests nicht gegenseitig beeinflussen. Einmal ehrlich ans Limit (außer beim Lauf), aber sauber in der Ausführung." }
+  ],
+
+  "days": [
+    {
+      "date": "2026-10-02",
+      "week": "SP0",
+      "sessions": [
+        {
+          "id": "2026-10-02-1",
+          "title": "Übungen kennenlernen",
+          "place": ["Z"],
+          "minutes": 25,
+          "effort": "3–4",
+          "goal": "Abläufe lernen: F3 Griff, F8 Rumpf, F5 Zug",
+          "optional": true,
+          "variants": {
+            "normal": {
+              "items": [
+                { "exercise": "A1", "minutes": 5 },
+                { "exercise": "U1", "sets": 3, "seconds": 15, "restSec": 90, "note": "Auf „Schultern aktiv“ achten (G1)." },
+                { "exercise": "U2", "sets": 2, "reps": 5, "restSec": 90 },
+                { "exercise": "U10", "sets": 2, "reps": 5, "restSec": 90, "note": "langsam" },
+                { "exercise": "U26-UAS", "sets": 3, "seconds": 20, "restSec": 60 },
+                { "exercise": "D", "minutes": 5 }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "date": "2026-10-03",
+      "week": "SP0",
+      "sessions": [
+        {
+          "id": "2026-10-03-1",
+          "title": "Erster lockerer Lauf",
+          "place": ["L"],
+          "minutes": [30, 40],
+          "effort": "3–4",
+          "goal": "F1 Grundausdauer, Tempo-Gefühl (F7)",
+          "optional": true,
+          "altDates": ["2026-10-04"],
+          "variants": {
+            "normal": {
+              "items": [
+                { "exercise": "A2", "minutes": 5 },
+                { "exercise": "U20", "minutes": [25, 35], "note": "Im Sprechtempo. Gehpausen sind erlaubt und kein Scheitern." }
+              ]
+            },
+            "home": {
+              "place": ["Z"],
+              "minutes": 25,
+              "items": [
+                { "exercise": "U22-23", "sets": 6, "minutes": 3, "restSec": 60, "effort": "3–4", "note": "Treppe im Haus, ruhig hoch und runter" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "date": "2026-10-04",
+      "week": "SP0",
+      "note": "Frei, falls der Lauf schon am Samstag war.",
+      "sessions": []
+    },
+
+    {
+      "date": "2026-10-07",
+      "week": "SP1",
+      "rest": true,
+      "note": "Hundespaziergang.",
+      "sessions": [
+        {
+          "id": "2026-10-07-1",
+          "title": "Rumpf (optional)",
+          "place": ["Z"],
+          "minutes": 10,
+          "effort": "3–4",
+          "optional": true,
+          "variants": {
+            "normal": {
+              "items": [
+                { "exercise": "U26-UAS", "sets": 2, "seconds": 30 },
+                { "exercise": "U26-SEIT", "sets": 1, "seconds": 20, "perSide": "Seite" },
+                { "exercise": "D", "minutes": 5 }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "date": "2026-10-08",
+      "week": "SP1",
+      "sessions": [
+        {
+          "id": "2026-10-08-1",
+          "title": "Boulderhalle kennenlernen",
+          "place": ["B"],
+          "minutes": [60, 75],
+          "effort": "4–6",
+          "goal": "F6 Klettertechnik, F3 Griff (Insane Invert, Boulder Box, Tough TOROZ)",
+          "note": "Dauer inkl. Anfahrt.",
+          "variants": {
+            "normal": {
+              "items": [
+                { "text": "Einweisung der Halle, falls nötig (Sicherheitsregeln, Fallen auf die Matte)" },
+                { "text": "Aufwärmen: leichteste Boulder an der senkrechten Wand", "minutes": 10 },
+                { "exercise": "U8", "sets": 4, "seconds": 60, "restSec": 120, "note": "Fokus: Füße bewusst setzen, Hüfte nah an der Wand (G2)." },
+                { "exercise": "U9", "minutes": [15, 20], "note": "Nur die leichtesten Boulder am Überhang. Fokus: Arme lang, Füße nie lösen, seitlich eindrehen. Pro Versuch danach 2–3 Min. Pause. Aufhören, bevor die Unterarme „zumachen“." },
+                { "text": "Dehnen Unterarme und Schultern", "minutes": 5 }
+              ]
+            },
+            "home": {
+              "place": ["Z"],
+              "minutes": 40,
+              "note": "Was das nicht ersetzt: die Klettertechnik (Füße setzen, eindrehen). Die lernt man nur an der Wand. Den Hallentermin bei nächster Gelegenheit nachholen.",
+              "items": [
+                { "exercise": "A1", "minutes": 5 },
+                { "exercise": "U5", "sets": 3, "seconds": [10, 15], "restSec": 90, "note": "Finger und Unterarme" },
+                { "exercise": "U3c", "sets": 3, "seconds": [5, 10], "restSec": 120, "note": "Zug, wie beim Heranziehen an die Wand" },
+                { "exercise": "U10", "sets": 3, "reps": 6, "restSec": 90, "note": "Hüfte hochbringen, Beine unter Kontrolle" },
+                { "exercise": "HOHL", "sets": 3, "seconds": [15, 20], "restSec": 60, "note": "Die Körperspannung, die im Überhang die Hüfte an der Wand hält." },
+                { "exercise": "D", "minutes": 5 }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "date": "2026-10-09",
+      "week": "SP1",
+      "sessions": [
+        {
+          "id": "2026-10-09-1",
+          "title": "Treppe und Beine",
+          "place": ["T"],
+          "minutes": 35,
+          "effort": "4–5",
+          "goal": "F2 Bergauf, F4 Bergab, F10 Trittsicherheit",
+          "variants": {
+            "normal": {
+              "items": [
+                { "exercise": "A2", "minutes": 5, "note": "Weg zur Treppe" },
+                { "text": "Stufen zählen (einmal)", "input": { "type": "number", "label": "Stufen Treppe draußen" } },
+                { "exercise": "U22-23", "sets": 3, "minutes": 4, "restSec": 120, "effort": "4–5", "note": "Bergab: kurze Schritte, Knie leicht gebeugt, nicht „fallen lassen“. Durchgänge mitzählen." },
+                { "exercise": "U24", "sets": 2, "reps": 8, "perSide": "Bein", "restSec": 60, "note": "Von der untersten Stufe, 3 s runter." },
+                { "exercise": "U16", "sets": 2, "reps": 12, "restSec": 60, "note": "ohne Gewicht" },
+                { "exercise": "U25", "sets": 2, "seconds": 30, "perSide": "Bein" }
+              ]
+            },
+            "home": {
+              "place": ["Z"],
+              "note": "Dasselbe an der Treppe im Haus.",
+              "items": [
+                { "exercise": "A1", "minutes": 5 },
+                { "text": "Stufen zählen (einmal)", "input": { "type": "number", "label": "Stufen Treppe im Haus" } },
+                { "exercise": "U22-23", "sets": 3, "minutes": 4, "restSec": 120, "effort": "4–5", "note": "Bergab: kurze Schritte, Knie leicht gebeugt. Durchgänge mitzählen." },
+                { "exercise": "U24", "sets": 2, "reps": 8, "perSide": "Bein", "restSec": 60, "note": "Von der untersten Stufe, 3 s runter." },
+                { "exercise": "U16", "sets": 2, "reps": 12, "restSec": 60, "note": "ohne Gewicht" },
+                { "exercise": "U25", "sets": 2, "seconds": 30, "perSide": "Bein" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "date": "2026-10-12",
+      "week": "SP2",
+      "highlight": "Eingangstest",
+      "sessions": [
+        {
+          "id": "2026-10-12-1",
+          "title": "Test A: Griff, Zug, Rumpf",
+          "place": ["Z"],
+          "minutes": 35,
+          "effort": "Test",
+          "goal": "Ausgangswerte F3, F5, F8",
+          "testRound": "Eingangstest",
+          "variants": {
+            "normal": {
+              "items": [
+                { "exercise": "A1", "minutes": 5, "note": "Dazu 2 × 15 s locker hängen." },
+                { "test": "T1" },
+                { "text": "Pause", "minutes": 5 },
+                { "test": "T2" },
+                { "text": "Pause", "minutes": 5 },
+                { "test": "T3b" },
+                { "text": "Pause", "minutes": 3 },
+                { "test": "T5" },
+                { "exercise": "D", "minutes": 5 }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "date": "2026-10-13",
+      "week": "SP2",
+      "highlight": "Eingangstest",
+      "sessions": [
+        {
+          "id": "2026-10-13-1",
+          "title": "Test B: Ausdauer",
+          "place": ["L"],
+          "minutes": 40,
+          "effort": "3–4 (!)",
+          "goal": "Ausgangswert F1",
+          "testRound": "Eingangstest",
+          "note": "Home-Alternative: keine gleichwertige. Den Test lieber auf einen anderen Tag schieben.",
+          "variants": {
+            "normal": {
+              "items": [
+                { "exercise": "A2", "minutes": 5 },
+                { "test": "T6" }
+              ]
+            },
+            "home": {
+              "place": ["Z"],
+              "minutes": 25,
+              "note": "Ersetzt den Test nicht. T6 an einem anderen Tag nachholen.",
+              "items": [
+                { "exercise": "U22-23", "sets": 6, "minutes": 3, "restSec": 60, "effort": "3–4", "note": "Treppe im Haus, ruhig hoch und runter" },
+                { "exercise": "D", "minutes": 5 }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
