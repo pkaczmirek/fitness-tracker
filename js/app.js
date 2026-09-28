@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 13;
+  const APP_VERSION = 14;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];

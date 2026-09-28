@@ -93,7 +93,9 @@
     for (const g of plan.guides || []) next.guides[g.id] = g;
     Object.assign(next.places, plan.places);
     next.event = plan.event;
-    next.imports = next.imports.filter((i) => i.planId !== plan.planId);
+    // Gleicher Plan-Teil oder komplett überdeckter Zeitraum: alter Eintrag entfällt
+    next.imports = next.imports.filter((i) => i.planId !== plan.planId &&
+      !(i.range.from >= plan.range.from && i.range.to <= plan.range.to));
     next.imports.push({
       planId: plan.planId,
       title: plan.title,

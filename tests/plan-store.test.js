@@ -42,6 +42,16 @@ test('Neu-Import ersetzt nur Tage im eigenen Zeitraum', () => {
   assert.equal(s.imports.length, 1, 'gleiche planId ersetzt den Import-Eintrag');
 });
 
+test('Vollständig überdeckter älterer Import verschwindet aus der Liste', () => {
+  let s = PS.applyImport(PS.emptyStore(), example, '2026-09-28');
+  const real = Object.assign({}, example, { planId: 'startpaket', title: 'Startpaket' });
+  s = PS.applyImport(s, real, '2026-09-30');
+  assert.deepEqual(s.imports.map((i) => i.planId), ['startpaket']);
+  const later = Object.assign({}, example, { planId: 'phase1', range: { from: '2026-10-19', to: '2026-12-20' }, days: [] });
+  s = PS.applyImport(s, later, '2026-10-15');
+  assert.deepEqual(s.imports.map((i) => i.planId), ['startpaket', 'phase1'], 'nicht überdeckter bleibt');
+});
+
 test('Bibliothek aus früherem Import bleibt für spätere Dateien gültig', () => {
   const s = PS.applyImport(PS.emptyStore(), example, '2026-09-28');
   const next = {
