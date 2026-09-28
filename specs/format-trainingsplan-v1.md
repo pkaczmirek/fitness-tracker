@@ -295,6 +295,7 @@ Vor dem Import zeigt die App eine Zusammenfassung („Startpaket · 18 Tage ·
 | `Kurzfassung (30 Min.): 1, 2, 3, 4, 7 und 1 Satz Unterarmstütz` | `"short": { "minutes": 30, "items": [ … ausgeschrieben … ] }` |
 | `Home-Alternative: dasselbe an der Treppe im Haus` | `"home": { "place": ["Z"], "items": [ … vollständige Kopie … ] }` |
 | `Was das nicht ersetzt: …` | `"note"` in der `home`-Fassung |
+| `Dauer: 60–75 Min. inkl. Anfahrt` | `"minutes": [60, 75]` an der Einheit, `"note": "Dauer inkl. Anfahrt."` in der **`normal`-Fassung** (nicht an der Einheit, sonst steht es auch bei „Zuhause“). Faustregel: Ein Hinweis gehört an die Einheit nur, wenn er für **alle** Fassungen stimmt. |
 | `Home-Alternative: keine gleichwertige. Test verschieben.` | `note` an der Einheit; ggf. `home` mit Ersatz-Einheit und `note` „ersetzt den Test nicht“ |
 | `Tipp zum Zeitsparen: 2+3 im Wechsel` | `note` an der Einheit oder an den Übungen |
 | Einstiegstage „alles freiwillig“, optionaler Rumpf am Ruhetag | `"optional": true` |

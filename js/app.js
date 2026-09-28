@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 12;
+  const APP_VERSION = 13;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -144,20 +144,25 @@
     return d;
   }
 
+  /* Gespeicherte oder aus einem Backup gelesene Daten vervollständigen und migrieren */
+  function normalize(parsed) {
+    const merged = Object.assign(defaultData(), parsed);
+    merged.settings = Object.assign(defaultData().settings, parsed.settings);
+    merged.settings.trackFrom = Object.assign(
+      defaultData().settings.trackFrom,
+      (parsed.settings && parsed.settings.trackFrom) || {}
+    );
+    return migrate(merged);
+  }
+
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaultData();
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || !parsed.settings) return defaultData();
-      const merged = Object.assign(defaultData(), parsed);
-      merged.settings = Object.assign(defaultData().settings, parsed.settings);
-      merged.settings.trackFrom = Object.assign(
-        defaultData().settings.trackFrom,
-        (parsed.settings && parsed.settings.trackFrom) || {}
-      );
       const before = parsed.version || 1;
-      const migrated = migrate(merged);
+      const migrated = normalize(parsed);
       // Migration sofort zurückschreiben, nicht erst beim nächsten Speichern
       if (migrated.version !== before) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
@@ -415,6 +420,35 @@
   let currentView = 'today';
   let editLogMode = false; // logDialog: neu vs. bearbeiten
 
+  // Trainingsplan (eigener Speicherbereich, siehe js/plan-store.js)
+  let plan = PlanStore.load(localStorage);
+  let planWeekId = null;
+  let planSeg = 'week';
+  let openSession = null; // { date, id, variant } der offenen Einheit-Seite
+  let pendingPlan = null; // geprüfte Plan-Datei, wartet auf Bestätigung
+
+  function hasPlan() {
+    return PlanStore.hasPlan(plan);
+  }
+
+  function savePlan() {
+    try {
+      PlanStore.save(localStorage, plan);
+      return true;
+    } catch (e) {
+      alert('Der Plan konnte nicht gespeichert werden (Speicher voll?).');
+      return false;
+    }
+  }
+
+  /* Mit Plan darf man bis zum letzten Plantag in die Zukunft blättern */
+  function maxNavKey() {
+    const today = todayKey();
+    if (!hasPlan()) return today;
+    const last = PlanStore.bounds(plan).last;
+    return last > today ? last : today;
+  }
+
   /* ---------- Kürzel ---------- */
   const $ = (sel) => document.querySelector(sel);
 
@@ -454,27 +488,40 @@
     if (currentView === 'history') renderHistory();
     if (currentView === 'manage') renderManage();
     if (currentView === 'more') renderMore();
+    if (currentView === 'plan') renderPlanTab();
+  }
+
+  function countdownText(days) {
+    if (days > 1) return `noch ${days} Tage`;
+    if (days === 1) return 'morgen ist Renntag';
+    if (days === 0) return 'Renntag!';
+    return 'geschafft';
   }
 
   function renderHeader() {
     const badge = $('#challengeBadge');
-    const day = challengeDay(currentKey);
-    if (day >= 1 && day <= data.settings.challengeDays) {
-      badge.textContent = `Tag ${day} / ${data.settings.challengeDays}`;
-    } else if (day > data.settings.challengeDays) {
-      badge.textContent = 'Challenge geschafft 🎉';
+    if (hasPlan() && plan.event) {
+      badge.textContent = `🏁 ${countdownText(PlanStore.daysBetween(todayKey(), plan.event.date))}`;
     } else {
-      badge.textContent = '';
+      const day = challengeDay(currentKey);
+      if (day >= 1 && day <= data.settings.challengeDays) {
+        badge.textContent = `Tag ${day} / ${data.settings.challengeDays}`;
+      } else if (day > data.settings.challengeDays) {
+        badge.textContent = 'Challenge geschafft 🎉';
+      } else {
+        badge.textContent = '';
+      }
     }
     $('#datePicker').value = currentKey;
-    $('#datePicker').max = todayKey();
-    $('#nextDay').disabled = currentKey >= todayKey();
+    $('#datePicker').max = maxNavKey();
+    $('#nextDay').disabled = currentKey >= maxNavKey();
     $('#todayBtn').hidden = currentKey === todayKey();
   }
 
   /* ---------- Heute ---------- */
 
   function renderToday() {
+    renderPlanCard();
     const day = getDay(currentKey);
 
     // Gewicht
@@ -1748,7 +1795,8 @@
   }
 
   function exportBackup() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const payload = hasPlan() ? Object.assign({}, data, { plan }) : data;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     downloadBlob(blob, `Fitness-Tracker-Backup_${todayKey()}.json`);
     toast('Backup erstellt');
   }
@@ -1761,9 +1809,18 @@
         if (!parsed || typeof parsed !== 'object' || !parsed.settings || !parsed.days) {
           throw new Error('Kein gültiges Backup');
         }
-        if (!confirm('Backup einspielen? Die aktuellen Daten auf diesem Gerät werden ersetzt.')) return;
-        data = Object.assign(defaultData(), parsed);
+        const planPart = PlanStore.isStore(parsed.plan) ? parsed.plan : null;
+        delete parsed.plan;
+        const msg = 'Backup einspielen? Die aktuellen Daten auf diesem Gerät werden ersetzt.' +
+          (planPart ? ' Der Trainingsplan aus dem Backup wird ebenfalls übernommen.' : '');
+        if (!confirm(msg)) return;
+        data = normalize(parsed);
         save();
+        // Alte Backups ohne Plan lassen den aktuellen Plan stehen
+        if (planPart) {
+          plan = Object.assign(PlanStore.emptyStore(), planPart);
+          savePlan();
+        }
         currentKey = todayKey();
         renderAll();
         toast('Backup eingespielt ✓');
@@ -1772,6 +1829,418 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  /* ============================================================
+     Trainingsplan (Spec 001, Schritt 1: Plan sehen)
+     ============================================================ */
+
+  function placeNames(codes) {
+    return (codes || []).map((c) => plan.places[c] || c).join(', ');
+  }
+
+  function effortText(e) {
+    if (!e) return '';
+    return e === 'Test' ? '🧪 Test' : `Anstrengung ${e}`;
+  }
+
+  function formatDayShort(key) {
+    return fromKey(key).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  }
+
+  function exerciseTitle(ex) {
+    return ex.label ? `${ex.label} ${ex.name}` : ex.name;
+  }
+
+  /* ---------- Heute: Plan-Karte ---------- */
+
+  function renderPlanCard() {
+    const card = $('#cardPlan');
+    const active = hasPlan();
+    const future = currentKey > todayKey();
+    card.hidden = !active;
+    // Alte Challenge-Trainingskarte wird mit Plan zum Archiv (Spec 001, 8.1)
+    $('#cardTraining').hidden = active;
+    $('#view-today').classList.toggle('is-future', future);
+    $('#futureHint').hidden = !future;
+    if (!active) return;
+
+    card.innerHTML = '';
+    const day = plan.days[currentKey];
+    const week = PlanStore.weekForDate(plan, currentKey);
+    const head = el('div', { class: 'card-head' }, el('h2', null, '🗓️ Trainingsplan'));
+    if (day && day.highlight) head.append(el('span', { class: 'plan-badge' }, day.highlight));
+    card.append(head);
+    if (week) card.append(el('p', { class: 'plan-week-line' }, `${week.phase} · ${week.title}`));
+
+    if (!day) {
+      const b = PlanStore.bounds(plan);
+      if (currentKey < b.first) {
+        card.append(el('p', { class: 'empty-note' }, `Der Plan beginnt am ${formatDateLong(b.first)}.`));
+        card.append(el('div', { class: 'quick-btns' },
+          el('button', { class: 'btn', onclick: () => { currentKey = b.first; renderAll(); } }, 'Zum Planstart')));
+      } else if (currentKey > b.last) {
+        card.append(el('p', { class: 'empty-note' }, 'Für diesen Tag ist noch kein Plan importiert.'));
+      } else {
+        card.append(el('p', { class: 'empty-note' }, 'Frei: an diesem Tag ist nichts geplant.'));
+      }
+      return;
+    }
+
+    if (day.rest) card.append(el('div', { class: 'rest-banner' }, '😌 Ruhetag'));
+    if (day.note) card.append(el('p', { class: 'plan-day-note' }, day.note));
+    for (const s of day.sessions) {
+      const meta = [placeNames(s.place), PlanStore.minutesText(s.minutes), effortText(s.effort)].filter(Boolean);
+      const main = el('div', { class: 'plan-session-main' },
+        el('div', { class: 'plan-session-title' }, s.title,
+          s.optional ? el('span', { class: 'plan-tag' }, 'freiwillig') : null),
+        el('div', { class: 'plan-session-meta' }, meta.join(' · ')));
+      if (s.altDates && s.altDates.length) {
+        main.append(el('div', { class: 'plan-session-meta' }, `auch möglich: ${s.altDates.map(formatDayShort).join(', ')}`));
+      }
+      card.append(el('button', {
+        class: 'plan-session', type: 'button',
+        onclick: () => openSessionPage(currentKey, s.id)
+      }, main, el('span', { class: 'plan-chevron', 'aria-hidden': 'true' }, '›')));
+    }
+    if (!day.sessions.length && !day.rest && !day.note) {
+      card.append(el('p', { class: 'empty-note' }, 'Frei: an diesem Tag ist nichts geplant.'));
+    }
+  }
+
+  /* ---------- Einheit-Seite ---------- */
+
+  function findSession(date, id) {
+    const day = plan.days[date];
+    return day ? day.sessions.find((s) => s.id === id) || null : null;
+  }
+
+  function openSessionPage(date, id) {
+    if (!findSession(date, id)) return;
+    openSession = { date, id, variant: 'normal' };
+    renderSessionPage();
+    $('#sessionPage').hidden = false;
+    $('#sessionPage').scrollTop = 0;
+    document.body.classList.add('page-open');
+    // Zurück-Taste/-Geste von Android schließt die Seite statt die App
+    history.pushState({ page: 'session' }, '');
+  }
+
+  function closeSessionPage() {
+    openSession = null;
+    $('#sessionPage').hidden = true;
+    document.body.classList.remove('page-open');
+  }
+
+  function renderSessionPage() {
+    const s = findSession(openSession.date, openSession.id);
+    if (!s) { closeSessionPage(); return; }
+    const v = PlanStore.variantOf(s, openSession.variant) || PlanStore.variantOf(s, 'normal');
+    $('#sessionPageTitle').textContent = s.title;
+    const body = $('#sessionBody');
+    body.innerHTML = '';
+
+    const tags = el('div', { class: 'session-tags' }, el('span', { class: 'plan-week-line' }, formatDateLong(openSession.date)));
+    if (s.optional) tags.append(el('span', { class: 'plan-tag' }, 'freiwillig'));
+    if (s.testRound) tags.append(el('span', { class: 'plan-badge' }, `🧪 ${s.testRound}`));
+    body.append(tags);
+
+    const seg = el('div', { class: 'seg', role: 'tablist' });
+    for (const [name, label] of [['normal', 'Normal'], ['short', 'Kurz'], ['home', 'Zuhause']]) {
+      const btn = el('button', {
+        class: 'seg-btn' + (v.name === name ? ' active' : ''), type: 'button', role: 'tab',
+        onclick: () => { openSession.variant = name; renderSessionPage(); }
+      }, label);
+      if (!(s.variants && s.variants[name])) btn.disabled = true;
+      seg.append(btn);
+    }
+    body.append(seg);
+
+    const info = el('div', { class: 'card session-info' },
+      el('div', null, `📍 ${placeNames(v.place)}`),
+      el('div', null, `⏱️ ${PlanStore.minutesText(v.minutes)}`),
+      el('div', null, `💪 ${effortText(v.effort)}`));
+    if (s.goal) info.append(el('div', null, `🎯 ${s.goal}`));
+    if (s.note) info.append(el('p', { class: 'session-note' }, s.note));
+    if (v.note) info.append(el('p', { class: 'session-note is-variant' }, v.note));
+    body.append(info);
+
+    const list = el('ol', { class: 'card session-items' });
+    for (const it of v.items) list.append(renderPlanItem(it));
+    body.append(list);
+    body.append(el('p', { class: 'hint session-footer' },
+      'Ergebnisse Satz für Satz eintragen: kommt mit dem nächsten Update.'));
+  }
+
+  function renderPlanItem(it) {
+    const li = el('li', { class: 'session-item' });
+    if (it.exercise != null) {
+      const ex = plan.exercises[it.exercise];
+      li.append(el('button', {
+        class: 'item-title-btn', type: 'button',
+        onclick: () => showExerciseInfo(it.exercise)
+      }, ex ? exerciseTitle(ex) : it.exercise));
+      const target = PlanStore.targetText(it);
+      if (target) li.append(el('div', { class: 'item-target' }, target));
+    } else if (it.test != null) {
+      const t = plan.tests[it.test];
+      li.classList.add('is-test');
+      li.append(el('button', {
+        class: 'item-title-btn', type: 'button',
+        onclick: () => showTestInfo(it.test)
+      }, `🧪 ${it.test}${t ? ' ' + t.name : ''}`));
+      if (t && t.target) li.append(el('div', { class: 'item-target' }, `Zielmarke: ${t.target.text}`));
+    } else {
+      li.classList.add('is-step');
+      li.append(el('div', { class: 'item-step' },
+        it.text + (it.minutes != null ? ` · ${PlanStore.minutesText(it.minutes)}` : '')));
+      if (it.input) li.append(el('div', { class: 'item-target' }, `✎ Notieren: ${it.input.label}`));
+    }
+    if (it.note) li.append(el('div', { class: 'item-note' }, it.note));
+    return li;
+  }
+
+  /* ---------- Spickzettel ---------- */
+
+  function showInfo(title, sections) {
+    $('#infoTitle').textContent = title;
+    const body = $('#infoBody');
+    body.innerHTML = '';
+    for (const [heading, text] of sections) {
+      if (!text) continue;
+      body.append(el('h4', null, heading), el('p', null, text));
+    }
+    $('#infoDialog').showModal();
+  }
+
+  function showExerciseInfo(id) {
+    const ex = plan.exercises[id];
+    if (!ex) return;
+    showInfo(exerciseTitle(ex), [
+      ['So geht\'s', ex.howTo], ['Achte auf', ex.watch], ['Schwerer machen', ex.harder]
+    ]);
+  }
+
+  function showTestInfo(id) {
+    const t = plan.tests[id];
+    if (!t) return;
+    showInfo(`${t.id} ${t.name}`, [
+      ['So geht\'s', t.howTo],
+      ['Hinweis', t.note],
+      ['Messwerte', (t.fields || []).map((f) => f.label).join(' · ')],
+      ['Zielmarke', t.target && t.target.text],
+      ['Wofür', t.goal]
+    ]);
+  }
+
+  /* ---------- Plan-Tab ---------- */
+
+  function renderPlanTab() {
+    const sum = $('#planSummary');
+    sum.innerHTML = '';
+    const active = hasPlan();
+    $('#planContent').hidden = !active;
+    if (!active) {
+      sum.append(el('p', { class: 'hint' },
+        'Noch kein Plan importiert. Die Plan-Datei (JSON) kommt aus dem Trainingsplan-Projekt. ' +
+        'Schick sie dir aufs Handy (z. B. per Mail an dich selbst) und wähle sie hier mit „Importieren“ aus.'));
+      return;
+    }
+    if (plan.event) {
+      const n = PlanStore.daysBetween(todayKey(), plan.event.date);
+      sum.append(
+        el('div', { class: 'plan-event' }, `🏁 ${plan.event.name}`),
+        el('div', { class: 'plan-week-line' }, `${formatDateLong(plan.event.date)} · ${countdownText(n)}`));
+    }
+    for (const imp of plan.imports) {
+      sum.append(el('div', { class: 'manage-sub' },
+        `📄 ${imp.title} · ${formatDateShort(imp.range.from)}–${formatDateShort(imp.range.to)}`));
+    }
+
+    document.querySelectorAll('#planContent .seg-btn').forEach((b) =>
+      b.classList.toggle('active', b.dataset.seg === planSeg));
+    $('#planSegWeek').hidden = planSeg !== 'week';
+    $('#planSegExercises').hidden = planSeg !== 'exercises';
+    $('#planSegInfos').hidden = planSeg !== 'infos';
+    if (planSeg === 'week') renderPlanWeek();
+    if (planSeg === 'exercises') renderPlanExercises();
+    if (planSeg === 'infos') renderPlanInfos();
+  }
+
+  function renderPlanWeek() {
+    const box = $('#planSegWeek');
+    box.innerHTML = '';
+    const weeks = PlanStore.weekList(plan);
+    if (!planWeekId || !plan.weeks[planWeekId]) {
+      const w0 = PlanStore.initialWeek(plan, todayKey());
+      planWeekId = w0 ? w0.id : null;
+    }
+    const idx = weeks.findIndex((w) => w.id === planWeekId);
+    const w = weeks[idx];
+    if (!w) {
+      box.append(el('p', { class: 'empty-note' }, 'Der Plan enthält keine Wochen.'));
+      return;
+    }
+
+    const prev = el('button', {
+      class: 'icon-btn', type: 'button', 'aria-label': 'Vorige Woche',
+      onclick: () => { planWeekId = weeks[idx - 1].id; renderPlanWeek(); }
+    }, '‹');
+    const next = el('button', {
+      class: 'icon-btn', type: 'button', 'aria-label': 'Nächste Woche',
+      onclick: () => { planWeekId = weeks[idx + 1].id; renderPlanWeek(); }
+    }, '›');
+    prev.disabled = idx <= 0;
+    next.disabled = idx >= weeks.length - 1;
+    box.append(el('div', { class: 'week-nav' },
+      prev,
+      el('div', { class: 'week-nav-title' },
+        el('div', { class: 'week-title' }, w.title),
+        el('div', { class: 'plan-week-line' }, `${w.phase} · ${PlanStore.weekTypeText(w)}`)),
+      next));
+    if (w.goal) box.append(el('p', { class: 'week-goal' }, `🎯 ${w.goal}`));
+    if (w.note) box.append(el('p', { class: 'hint' }, w.note));
+
+    const today = todayKey();
+    for (const d of PlanStore.weekDates(plan, w.id)) {
+      const day = plan.days[d];
+      let title = 'frei';
+      let places = '';
+      let optional = false;
+      if (day && day.sessions.length) {
+        title = day.sessions.map((s) => s.title).join(' + ');
+        places = [...new Set(day.sessions.flatMap((s) => s.place || []))].join(' ');
+        optional = day.sessions.every((s) => s.optional);
+      } else if (day && day.rest) {
+        title = '😌 Ruhetag';
+      }
+      const cls = ['week-day'];
+      if (d === today) cls.push('is-today');
+      if (!day || !day.sessions.length) cls.push('is-free');
+      const row = el('button', {
+        class: cls.join(' '), type: 'button',
+        onclick: () => { currentKey = d; switchView('today'); }
+      },
+        el('span', { class: 'week-day-date' }, formatDayShort(d)),
+        el('span', { class: 'week-day-title' }, title,
+          optional ? el('span', { class: 'plan-tag' }, 'freiwillig') : null,
+          day && day.highlight ? el('span', { class: 'plan-badge' }, day.highlight) : null),
+        el('span', { class: 'week-day-place' }, places));
+      box.append(row);
+    }
+  }
+
+  function renderPlanExercises() {
+    const box = $('#planSegExercises');
+    box.innerHTML = '';
+    const groups = new Map();
+    for (const ex of Object.values(plan.exercises)) {
+      const g = ex.group || 'Sonstiges';
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(ex);
+    }
+    const libRow = (label, name, onclick) => el('button', { class: 'lib-row', type: 'button', onclick },
+      el('span', { class: 'lib-label' }, label || ''),
+      el('span', { class: 'lib-name' }, name),
+      el('span', { class: 'plan-chevron', 'aria-hidden': 'true' }, '›'));
+    for (const [g, list] of groups) {
+      const card = el('div', { class: 'card' }, el('div', { class: 'card-head' }, el('h2', null, g)));
+      for (const ex of list) card.append(libRow(ex.label, ex.name, () => showExerciseInfo(ex.id)));
+      box.append(card);
+    }
+    const tests = Object.values(plan.tests)
+      .sort((a, b) => a.id.localeCompare(b.id, 'de', { numeric: true }));
+    if (tests.length) {
+      const card = el('div', { class: 'card' }, el('div', { class: 'card-head' }, el('h2', null, '🧪 Tests')));
+      for (const t of tests) card.append(libRow(t.id, t.name, () => showTestInfo(t.id)));
+      box.append(card);
+    }
+  }
+
+  function renderPlanInfos() {
+    const box = $('#planSegInfos');
+    box.innerHTML = '';
+    for (const g of Object.values(plan.guides)) {
+      box.append(el('div', { class: 'card' },
+        el('div', { class: 'card-head' }, el('h2', null, g.title)),
+        el('p', { class: 'guide-text' }, g.text)));
+    }
+    const legend = el('div', { class: 'card' }, el('div', { class: 'card-head' }, el('h2', null, '📍 Orte')));
+    for (const [code, name] of Object.entries(plan.places)) {
+      legend.append(el('div', { class: 'ex-row' }, el('span', { class: 'lib-label' }, code), el('span', { class: 'ex-name' }, name)));
+    }
+    box.append(legend);
+  }
+
+  /* ---------- Import ---------- */
+
+  function handlePlanFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let parsed;
+      try {
+        parsed = JSON.parse(reader.result);
+      } catch (e) {
+        showImportErrors(['Die Datei ist keine gültige JSON-Datei.']);
+        return;
+      }
+      const r = PlanCheck.checkPlan(parsed, PlanStore.existingIds(plan));
+      if (r.errors.length) { showImportErrors(r.errors); return; }
+      pendingPlan = parsed;
+      showImportSummary(parsed, r);
+    };
+    reader.readAsText(file);
+  }
+
+  function showImportErrors(errors) {
+    pendingPlan = null;
+    $('#piTitle').textContent = '⚠️ Plan-Datei hat Fehler';
+    const body = $('#piBody');
+    body.innerHTML = '';
+    body.append(el('p', null,
+      `${errors.length} Fehler gefunden. Es wurde nichts importiert. Lass die Datei im Trainingsplan-Projekt korrigieren:`));
+    const ul = el('ul', { class: 'pi-list' });
+    errors.slice(0, 30).forEach((e) => ul.append(el('li', null, e)));
+    if (errors.length > 30) ul.append(el('li', null, `… und ${errors.length - 30} weitere`));
+    body.append(ul);
+    $('#piConfirm').hidden = true;
+    $('#piCancel').textContent = 'Schließen';
+    $('#planImportDialog').showModal();
+  }
+
+  function showImportSummary(p, r) {
+    $('#piTitle').textContent = 'Plan importieren?';
+    const body = $('#piBody');
+    body.innerHTML = '';
+    const replaced = PlanStore.countReplaced(plan, p);
+    body.append(
+      el('p', { class: 'pi-plan-title' }, p.title),
+      el('p', null, `📅 ${formatDateShort(p.range.from)} – ${formatDateShort(p.range.to)}`),
+      el('p', null, `${r.stats.days} Tage · ${r.stats.sessions} Einheiten · ${r.stats.exercises} Übungen · ${r.stats.tests} Tests`),
+      el('p', { class: 'hint' }, replaced
+        ? `Ersetzt ${replaced} bereits importierte Tage in diesem Zeitraum. Deine eingetragenen Ergebnisse bleiben erhalten.`
+        : 'Neue Tage, es wird nichts ersetzt.'));
+    if (r.warnings.length) {
+      body.append(el('p', { class: 'hint' }, `Hinweise (${r.warnings.length}), Import trotzdem möglich:`));
+      const ul = el('ul', { class: 'pi-list' });
+      r.warnings.slice(0, 10).forEach((w) => ul.append(el('li', null, w)));
+      body.append(ul);
+    }
+    $('#piConfirm').hidden = false;
+    $('#piCancel').textContent = 'Abbrechen';
+    $('#planImportDialog').showModal();
+  }
+
+  function confirmPlanImport() {
+    if (!pendingPlan) return;
+    const previous = plan;
+    plan = PlanStore.applyImport(plan, pendingPlan, todayKey());
+    if (!savePlan()) { plan = previous; return; }
+    pendingPlan = null;
+    planWeekId = null;
+    $('#planImportDialog').close();
+    toast('Plan importiert ✓');
+    renderAll();
   }
 
   /* ============================================================
@@ -1797,11 +2266,11 @@
     // Tages-Navigation
     $('#prevDay').addEventListener('click', () => { currentKey = addDays(currentKey, -1); renderAll(); });
     $('#nextDay').addEventListener('click', () => {
-      if (currentKey < todayKey()) { currentKey = addDays(currentKey, 1); renderAll(); }
+      if (currentKey < maxNavKey()) { currentKey = addDays(currentKey, 1); renderAll(); }
     });
     $('#todayBtn').addEventListener('click', () => { currentKey = todayKey(); renderAll(); });
     $('#datePicker').addEventListener('change', (e) => {
-      if (e.target.value && e.target.value <= todayKey()) {
+      if (e.target.value && e.target.value <= maxNavKey()) {
         currentKey = e.target.value;
       }
       renderAll();
@@ -1963,7 +2432,7 @@
       if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
       const view = $('#view-today');
       if (dx < 0) {
-        if (currentKey >= todayKey()) return; // nicht in die Zukunft
+        if (currentKey >= maxNavKey()) return; // nicht über das Plan-Ende hinaus
         currentKey = addDays(currentKey, 1);
         view.classList.remove('slide-left', 'slide-right');
         void view.offsetWidth;
@@ -1989,6 +2458,20 @@
         updateFastingDisplay(getDay(currentKey));
       }
     }, 60000);
+
+    // Trainingsplan
+    $('#planImportBtn').addEventListener('click', () => $('#planFile').click());
+    $('#planFile').addEventListener('change', (e) => {
+      if (e.target.files[0]) handlePlanFile(e.target.files[0]);
+      e.target.value = '';
+    });
+    $('#piConfirm').addEventListener('click', confirmPlanImport);
+    document.querySelectorAll('#planContent .seg-btn').forEach((b) =>
+      b.addEventListener('click', () => { planSeg = b.dataset.seg; renderPlanTab(); }));
+    $('#sessionBack').addEventListener('click', () => history.back());
+    window.addEventListener('popstate', () => {
+      if (!$('#sessionPage').hidden) closeSessionPage();
+    });
 
     // Dialog-Abbrechen-Buttons
     document.querySelectorAll('dialog').forEach(wireCloseButtons);

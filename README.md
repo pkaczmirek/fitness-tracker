@@ -54,3 +54,12 @@ Pages, Cloudflare Pages, Netlify – alle kostenlos für statische Seiten).
   „Mehr"-Tab an und bietet nach dem Laden eines Updates einen
   Neustart-Knopf an.
 - Daten-Schlüssel im localStorage: `fitness-tracker:v1`
+
+## Trainingsplan (ab Version 13)
+
+- Plan-Dateien (JSON) aus dem Projekt `D:\dev\Trainingsplan` werden im Tab
+  **Plan** importiert. Format: [specs/format-trainingsplan-v1.md](specs/format-trainingsplan-v1.md),
+  Feature: [specs/001-trainingsplan.md](specs/001-trainingsplan.md).
+- Plan-Datei am PC prüfen: `node tools/check-plan.js <datei.json>`
+- Automatische Tests der Plan-Logik: `node --test tests/plan-store.test.js`
+- Echte Plan-Dateien und Trainingsprotokolle **nie** ins Repo legen.

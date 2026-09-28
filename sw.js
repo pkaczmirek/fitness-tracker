@@ -1,11 +1,13 @@
 /* Service Worker – App-Shell offline verfügbar machen */
-const CACHE = 'fitness-tracker-v12';
+const CACHE = 'fitness-tracker-v13';
 
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
   './js/app.js',
+  './js/plan-check.js',
+  './js/plan-store.js',
   './vendor/xlsx.full.min.js',
   './manifest.webmanifest',
   './icons/icon.svg',

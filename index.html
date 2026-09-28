@@ -33,6 +33,9 @@
     <!-- ===== Heute ===== -->
     <section id="view-today" class="view">
 
+      <div class="card" id="cardPlan" hidden></div>
+      <p class="hint future-hint" id="futureHint" hidden>🔭 Blick in die Zukunft: Gewicht, Essen und Tagesziele trägst du am Tag selbst ein.</p>
+
       <div class="card" id="cardWeight">
         <div class="card-head">
           <h2>⚖️ Gewicht</h2>
@@ -128,6 +131,28 @@
         <div class="card-head"><h2>💯 Übungen gesamt</h2></div>
         <p class="hint">Alles, was du seit Beginn gezählt hast – über alle Trainings hinweg.</p>
         <div id="exerciseTotals"></div>
+      </div>
+    </section>
+
+    <!-- ===== Plan ===== -->
+    <section id="view-plan" class="view" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>🗓️ Trainingsplan</h2>
+          <button class="btn btn-primary" id="planImportBtn">Importieren</button>
+        </div>
+        <div id="planSummary"></div>
+        <input type="file" id="planFile" accept=".json,application/json" hidden>
+      </div>
+      <div id="planContent" hidden>
+        <div class="seg" role="tablist">
+          <button class="seg-btn active" data-seg="week" role="tab">Woche</button>
+          <button class="seg-btn" data-seg="exercises" role="tab">Übungen</button>
+          <button class="seg-btn" data-seg="infos" role="tab">Infos</button>
+        </div>
+        <div class="card" id="planSegWeek"></div>
+        <div id="planSegExercises" hidden></div>
+        <div id="planSegInfos" hidden></div>
       </div>
     </section>
 
@@ -227,6 +252,7 @@
   <nav class="tabbar">
     <button class="tab active" data-view="today"><span class="tab-icon">📅</span>Heute</button>
     <button class="tab" data-view="history"><span class="tab-icon">📈</span>Verlauf</button>
+    <button class="tab" data-view="plan"><span class="tab-icon">🗓️</span>Plan</button>
     <button class="tab" data-view="manage"><span class="tab-icon">📋</span>Verwalten</button>
     <button class="tab" data-view="more"><span class="tab-icon">⚙️</span>Mehr</button>
   </nav>
@@ -358,6 +384,36 @@
     </form>
   </dialog>
 
+  <dialog id="infoDialog">
+    <div class="dialog-form">
+      <h3 id="infoTitle"></h3>
+      <div id="infoBody" class="info-body"></div>
+      <div class="dialog-btns">
+        <button type="button" class="btn btn-primary" data-close>Schließen</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="planImportDialog">
+    <div class="dialog-form">
+      <h3 id="piTitle"></h3>
+      <div id="piBody" class="info-body"></div>
+      <div class="dialog-btns">
+        <button type="button" class="btn" data-close id="piCancel">Abbrechen</button>
+        <button type="button" class="btn btn-primary" id="piConfirm">Importieren</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Einheit: eigene Seite über allem -->
+  <div id="sessionPage" class="page" hidden>
+    <div class="page-header">
+      <button class="icon-btn" id="sessionBack" aria-label="Zurück">‹</button>
+      <div class="page-title" id="sessionPageTitle"></div>
+    </div>
+    <div class="page-body" id="sessionBody"></div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
 
   <div id="updateBanner" class="update-banner" hidden>
@@ -366,6 +422,8 @@
   </div>
 
   <script src="vendor/xlsx.full.min.js"></script>
+  <script src="js/plan-check.js"></script>
+  <script src="js/plan-store.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

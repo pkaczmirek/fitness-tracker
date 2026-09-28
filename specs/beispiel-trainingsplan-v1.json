@@ -265,9 +265,9 @@
           "minutes": [60, 75],
           "effort": "4–6",
           "goal": "F6 Klettertechnik, F3 Griff (Insane Invert, Boulder Box, Tough TOROZ)",
-          "note": "Dauer inkl. Anfahrt.",
           "variants": {
             "normal": {
+              "note": "Dauer inkl. Anfahrt.",
               "items": [
                 { "text": "Einweisung der Halle, falls nötig (Sicherheitsregeln, Fallen auf die Matte)" },
                 { "text": "Aufwärmen: leichteste Boulder an der senkrechten Wand", "minutes": 10 },
