@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 16;
+  const APP_VERSION = 17;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -468,12 +468,15 @@
     }
   }
 
-  /* Mit Plan darf man bis zum letzten Plantag in die Zukunft blättern */
+  /* Zukunft: mindestens ein Jahr voraus, mit Plan bis Plan-Ende bzw. Renntag.
+     Zukünftige Tage zeigen nur den Plan, Eingaben sind dort ausgeblendet. */
   function maxNavKey() {
-    const today = todayKey();
-    if (!hasPlan()) return today;
-    const last = PlanStore.bounds(plan).last;
-    return last > today ? last : today;
+    const candidates = [addDays(todayKey(), 365)];
+    if (hasPlan()) {
+      candidates.push(PlanStore.bounds(plan).last);
+      if (plan.event) candidates.push(plan.event.date);
+    }
+    return candidates.sort().pop();
   }
 
   /* ---------- Kürzel ---------- */
