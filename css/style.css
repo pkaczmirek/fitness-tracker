@@ -993,3 +993,4 @@ body.page-open { overflow: hidden; }
 .status-btn.status-skipped.active { background: var(--ink-2); border-color: var(--ink-2); color: var(--surface-1); }
 .finish-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .finish-row .num-field { margin-top: 8px; }
+.reset-btn { display: block; margin: 12px auto 0; }

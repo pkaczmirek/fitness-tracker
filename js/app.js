@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 15;
+  const APP_VERSION = 16;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -2330,7 +2330,22 @@
     ta.value = result ? result.note || '' : '';
     ta.addEventListener('change', () => mutateSession(ctx, (r) => { r.note = ta.value.trim(); }, false));
     card.append(ta);
+    if (result) {
+      card.append(el('button', {
+        type: 'button', class: 'link-btn danger-btn reset-btn',
+        onclick: () => resetSession(ctx)
+      }, 'Alle Einträge dieser Einheit löschen'));
+    }
     return card;
+  }
+
+  function resetSession(ctx) {
+    if (!confirm(`Alle Einträge zu „${ctx.s.title}“ löschen? Die Einheit steht danach wieder wie geplant da.`)) return;
+    delete data.planLog.sessions[ctx.s.id];
+    save();
+    openSession.variant = 'normal';
+    renderSessionPage();
+    toast('Einträge gelöscht');
   }
 
   function setSessionStatus(ctx, status) {
