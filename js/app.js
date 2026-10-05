@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 18;
+  const APP_VERSION = 19;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -1897,7 +1897,6 @@
     card.hidden = !active;
     // Alte Challenge-Trainingskarte wird mit Plan zum Archiv (Spec 001, 8.1)
     $('#cardTraining').hidden = active;
-    $('#view-today').classList.toggle('is-future', future);
     $('#futureHint').hidden = !future;
     if (!active) return;
 
