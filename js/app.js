@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 20;
+  const APP_VERSION = 21;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -823,6 +823,19 @@
     // Erfolge
     const sc = $('#statsContainer');
     sc.innerHTML = '';
+
+    if (hasPlan()) {
+      const ps = PlanLog.planStats(plan, planIndex(), data.planMoves, data.planLog, todayKey());
+      const parts = [`${ps.done} erledigt`];
+      if (ps.partial) parts.push(`${ps.partial} teilweise`);
+      if (ps.skipped) parts.push(`${ps.skipped} ausgelassen`);
+      if (ps.missed) parts.push(`${ps.missed} nicht eingetragen`);
+      sc.append(statRow('🗓️',
+        ps.planned ? `${fmt(((ps.done + ps.partial) / ps.planned) * 100)} %` : '–',
+        ps.planned
+          ? `Plan: ${parts.join(' · ')} von ${ps.planned} Einheiten bis heute (ohne freiwillige)`
+          : 'Plan: noch keine Einheiten fällig'));
+    }
 
     const tr = trainingStats();
     const done = tr.trained + tr.activeRests + tr.rests;
@@ -1802,11 +1815,81 @@
     ws4['!cols'] = [{ wch: 11 }, { wch: 12 }, { wch: 20 }, { wch: 24 }, { wch: 13 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'Übungen');
 
+    if (hasPlanLog()) appendPlanSheets(wb);
     return wb;
   }
 
+  /* Excel-Blätter zum Trainingsplan (aus demselben Protokoll wie der JSON-Export) */
+  function appendPlanSheets(wb) {
+    const proto = buildProtocolNow();
+    const STATUS = { done: 'erledigt', partial: 'teilweise', skipped: 'ausgelassen', started: 'angefangen' };
+    const exName = (id) => {
+      const ex = plan.exercises[id];
+      return ex ? exerciseTitle(ex) : id;
+    };
+
+    const units = [['Datum', 'Geplant am', 'Einheit', 'Fassung', 'Status', 'Anstrengung', 'Dauer (Min.)', 'Notiz']];
+    const sets = [['Datum', 'Einheit', 'Übung', 'Satz', 'Wdh.', 'Sekunden', 'Minuten', 'kg', 'Durchgänge',
+      'km', 'Ø-Puls', 'Anstrengung', 'Gefühl', 'Variante/Notiz']];
+    for (const s of proto.sessions) {
+      units.push([s.date, s.plannedDate, s.title, VARIANT_LABELS[s.variant] || s.variant,
+        STATUS[s.status] || s.status, s.effort ?? '', s.minutes ?? '', s.note || '']);
+      for (const it of s.items) {
+        if (!it.exercise) continue;
+        const feel = it.feel ? PlanLog.FEEL[it.feel] : '';
+        const extra = [it.variant, it.note].filter(Boolean).join(' · ');
+        if (it.sets) {
+          it.sets.forEach((x, i) => sets.push([s.date, s.title, exName(it.exercise), i + 1,
+            x.reps ?? '', x.seconds ?? '', x.minutes ?? '', x.kg ?? '', x.rounds ?? '',
+            '', '', it.effort ?? '', feel, extra]));
+        } else if (it.cardio) {
+          const c = it.cardio;
+          sets.push([s.date, s.title, exName(it.exercise), '', '', '', c.minutes ?? '', '', '',
+            c.km ?? '', c.pulse ?? '', c.effort ?? '', feel, extra]);
+        }
+      }
+    }
+    const wsU = XLSX.utils.aoa_to_sheet(units);
+    wsU['!cols'] = [{ wch: 11 }, { wch: 11 }, { wch: 30 }, { wch: 9 }, { wch: 11 }, { wch: 11 }, { wch: 11 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, wsU, 'Plan-Einheiten');
+    const wsS = XLSX.utils.aoa_to_sheet(sets);
+    wsS['!cols'] = [{ wch: 11 }, { wch: 26 }, { wch: 26 }, { wch: 5 }, { wch: 6 }, { wch: 9 }, { wch: 8 },
+      { wch: 5 }, { wch: 10 }, { wch: 6 }, { wch: 7 }, { wch: 11 }, { wch: 24 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, wsS, 'Plan-Sätze');
+
+    const tests = [['Datum', 'Runde', 'Test', 'Name', 'Hauptwert', 'Ergebnis', 'Notiz']];
+    for (const r of proto.tests) {
+      const t = plan.tests[r.test];
+      tests.push([r.date, r.round || '', r.test, t ? t.name : '',
+        t && typeof r.values[t.main] === 'number' ? r.values[t.main] : '',
+        t ? PlanLog.testSummary(t, r.values) : JSON.stringify(r.values), r.note || '']);
+    }
+    const wsT = XLSX.utils.aoa_to_sheet(tests);
+    wsT['!cols'] = [{ wch: 11 }, { wch: 14 }, { wch: 5 }, { wch: 30 }, { wch: 10 }, { wch: 36 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, wsT, 'Tests');
+  }
+
+  /* Auf dem Handy: direkt teilen (Mail, WhatsApp, …); sonst herunterladen */
+  async function shareOrDownload(blob, filename, title, downloadedMsg) {
+    const file = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return; // Nutzer hat abgebrochen
+      }
+    }
+    downloadBlob(blob, filename);
+    toast(downloadedMsg);
+  }
+
+  function hasPlanLog() {
+    return Object.keys(data.planLog.sessions).length > 0 || data.planLog.tests.length > 0;
+  }
+
   async function exportExcel() {
-    if (!Object.keys(data.days).length) {
+    if (!Object.keys(data.days).length && !hasPlanLog()) {
       toast('Noch keine Daten zum Exportieren');
       return;
     }
@@ -1815,20 +1898,48 @@
     const blob = new Blob([out], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
-    const filename = `Fitness-Tracker_${todayKey()}.xlsx`;
-    const file = new File([blob], filename, { type: blob.type });
+    await shareOrDownload(blob, `Fitness-Tracker_${todayKey()}.xlsx`, 'Fitness Tracker Export', 'Excel-Datei heruntergeladen');
+  }
 
-    // Auf dem Handy: direkt teilen (Mail, WhatsApp, …); sonst herunterladen
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: 'Fitness Tracker Export' });
-        return;
-      } catch (e) {
-        if (e.name === 'AbortError') return; // Nutzer hat abgebrochen
-      }
+  /* ---------- Trainingsprotokoll (Spec 001, Schritt 4) ---------- */
+
+  /* Tageswerte für Claudes Auswertung (Format 2.4) */
+  function dailyValues() {
+    const out = [];
+    for (const key of Object.keys(data.days).sort()) {
+      const d = data.days[key];
+      const row = { date: key };
+      if (d.weight != null) row.weight = d.weight;
+      if (d.sleepOk) row.sleepOk = true;
+      const kcal = dayKcal(d);
+      if (kcal) row.kcal = kcal;
+      if (d.water) row.water = d.water;
+      if (Object.keys(row).length > 1) out.push(row);
     }
-    downloadBlob(blob, filename);
-    toast('Excel-Datei heruntergeladen');
+    return out;
+  }
+
+  function localIso(date) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${toKey(date)}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+  }
+
+  function buildProtocolNow() {
+    return PlanLog.buildProtocol({
+      store: plan, log: data.planLog, index: planIndex(), moves: data.planMoves,
+      daily: dailyValues(), appVersion: APP_VERSION, now: localIso(new Date())
+    });
+  }
+
+  async function exportProtocol() {
+    const proto = buildProtocolNow();
+    if (!proto.sessions.length && !proto.tests.length) {
+      toast('Noch keine Plan-Einträge zum Exportieren');
+      return;
+    }
+    const blob = new Blob([JSON.stringify(proto, null, 2)], { type: 'application/json' });
+    await shareOrDownload(blob, `Trainingsprotokoll_${todayKey()}.json`, 'Trainingsprotokoll',
+      'Trainingsprotokoll in „Downloads“ gespeichert');
   }
 
   function downloadBlob(blob, filename) {
@@ -2778,6 +2889,8 @@
       sum.append(el('div', { class: 'manage-sub' },
         `📄 ${imp.title} · ${formatDateShort(imp.range.from)}–${formatDateShort(imp.range.to)}`));
     }
+    sum.append(el('button', { class: 'btn btn-block plan-export-btn', type: 'button', onclick: exportProtocol },
+      '📤 Trainingsprotokoll exportieren'));
 
     document.querySelectorAll('#planContent .seg-btn').forEach((b) =>
       b.classList.toggle('active', b.dataset.seg === planSeg));
@@ -2945,6 +3058,17 @@
       el('p', { class: 'hint' }, replaced
         ? `Ersetzt ${replaced} bereits importierte Tage in diesem Zeitraum. Deine eingetragenen Ergebnisse bleiben erhalten.`
         : 'Neue Tage, es wird nichts ersetzt.'));
+    const later = PlanStore.laterDays(plan, p);
+    if (later.count) {
+      body.append(el('div', { class: 'pi-later' },
+        el('p', null, `Nach dem ${formatDateShort(p.range.to)} liegen noch ${later.count} Tage aus einem älteren Plan ` +
+          `(${formatDateShort(later.from)} – ${formatDateShort(later.to)}).`),
+        el('label', { class: 'checkbox-label' },
+          el('input', { type: 'checkbox', id: 'piDropAfter' }),
+          'Diese Tage entfernen'),
+        el('p', { class: 'hint' }, 'Nur ankreuzen, wenn der neue Plan den alten ab hier ersetzt. ' +
+          'Bei einer kleinen Zusatz-Datei (z. B. nur ein Testwochenende) nicht ankreuzen.')));
+    }
     if (r.warnings.length) {
       body.append(el('p', { class: 'hint' }, `Hinweise (${r.warnings.length}), Import trotzdem möglich:`));
       const ul = el('ul', { class: 'pi-list' });
@@ -2959,7 +3083,9 @@
   function confirmPlanImport() {
     if (!pendingPlan) return;
     const previous = plan;
-    plan = PlanStore.applyImport(plan, pendingPlan, todayKey());
+    const drop = $('#piDropAfter');
+    const dropAfter = !!(drop && drop.checked);
+    plan = PlanStore.applyImport(plan, pendingPlan, todayKey(), { dropAfter });
     if (!savePlan()) { plan = previous; return; }
     planIndexCache = null;
     pendingPlan = null;
@@ -3125,6 +3251,7 @@
 
     // Export & Backup
     $('#exportExcelBtn').addEventListener('click', exportExcel);
+    $('#exportProtocolBtn2').addEventListener('click', exportProtocol);
     $('#backupBtn').addEventListener('click', exportBackup);
     $('#restoreBtn').addEventListener('click', () => $('#restoreFile').click());
     $('#restoreFile').addEventListener('change', (e) => {

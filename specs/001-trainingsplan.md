@@ -1,10 +1,10 @@
 # Spec 001: Trainingsplan in der App
 
 Status: 2026-10-29: Schritte 1 und 2 im Einsatz (bis Version 19).
-**Schritt 3 (Tests) umgesetzt in Version 20, wartet auf Abnahme.** Neue
-Reihenfolge laut Trainingsplan-Spec 006, 4.7: als Nächstes Schritt 4
-(Export, nötig bis Mo 16.11.), danach die Wünsche „Zirkel-Anzeige“ und
-„Mini-Routine“ (Abschnitt 9).
+Schritt 3 (Tests, v20) abgenommen. **Schritt 4 (Export) umgesetzt in
+Version 21, wartet auf Abnahme**, dazu Import-Korrektur (verwaiste Wochen,
+Option „spätere Tage entfernen“, Abschnitt 10). Als Nächstes die Wünsche
+„Zirkel-Anzeige“ und „Mini-Routine“ (Abschnitt 9).
 
 Gegenstück im Trainingsplan-Projekt:
 `D:\dev\Trainingsplan\specs\004-app-anbindung.md`
@@ -139,7 +139,7 @@ auf dem Handy abgenommen.
 | **1. Plan sehen** | Import mit Prüfung · Plan-Speicher + Backup · Heute-Karte + Einheit-Seite mit Umschalter (nur ansehen) · Spickzettel · Plan-Tab mit Woche und Infos · Countdown | **Do 01.10.** (erster Tag Startpaket) |
 | **2. Eintragen** | Satz für Satz (alle Übungsarten, Schritte mit Notierfeld) · Vorbelegung · letzte Werte · Abschluss/Status · Verschieben/Tauschen | **Fr 02.10.** (erste Einheit mit Sätzen) |
 | **3. Tests** ✅ v20 | Test-Masken für alle Messwert-Arten (auch min:s, ja/nein, 0–10, Text) · Eintragen in der Einheit **und** im Plan-Tab „Tests“ (zum Nachtragen, z. B. Fitness-Analyse vom 09./10.10.) · Bearbeiten/Löschen · Verlauf je Test mit Kurve, gestrichelter Zielmarke und Tabelle · „Neue Bestmarke“ / „Zielmarke erreicht“ | **Mo 07.12.** (Test 2; ursprünglich 12.10.) |
-| **4. Export** | Trainingsprotokoll (JSON) · Excel-Blätter · Erfolgsquote „Plan-Einheiten erledigt“ | **Mo 16.11.** (erster Plan-Check, Spec 005 im Trainingsplan-Projekt) |
+| **4. Export** ✅ v21 | Trainingsprotokoll (JSON, Format Abschnitt 2) per Teilen oder Download, im Plan-Tab und unter „Mehr“ · Excel-Blätter Plan-Einheiten, Plan-Sätze, Tests · Erfolgsquote „Plan-Einheiten erledigt“ im Verlauf | **Mo 16.11.** (erster Plan-Check, Spec 005 im Trainingsplan-Projekt) |
 | **5. Aufräumen** | Umgang mit den alten Challenge-Funktionen (Frage 8.1) · kleinere Wünsche aus den ersten Wochen | danach |
 
 **Parallel im Trainingsplan-Projekt:** Plan-Datei für das **Startpaket**
@@ -153,6 +153,23 @@ erzeugen (vor Phase 1), mit `tools/check-plan.js` prüfen, dann aufs Handy.
   am Inhalt macht Claude im Trainingsplan-Projekt.
 - Pro Satz **ein** Wert, auch bei Übungen je Seite. Unterschiede zwischen
   links und rechts gehören in die Notiz.
+
+## 8. Geklärte Fragen (2026-09-28)
+
+1. **Alte Challenge-Funktionen** (Workouts wie „Meltdown“, Übungszähler,
+   Rekorde, Ruhetag-Varianten, Trainingsquote, Challenge-Badge):
+   **Archiv.** Die Daten bleiben im Verlauf und im Excel-Export. Sobald ein
+   Plan importiert ist, verschwindet die alte Trainings-Karte von der
+   Heute-Seite (ab Schritt 1) und der Challenge-Badge wird zum Countdown.
+   Erfolge und Verwalten räumt Schritt 5 auf.
+2. **Plan-Karte oben auf Heute, Details auf eigener Seite:** ja.
+3. **„Im Tank“ entfällt.** Pro Satz werden nur Wiederholungen bzw.
+   Sekunden (und ggf. kg) abgefragt. Stattdessen gibt es pro Übung ein
+   freiwilliges **Gefühl** mit drei Knöpfen: „zu hart“ · „genau richtig“ ·
+   „hätte schwerer sein können“ (Vorschlag des Nutzers). Das reicht für die
+   Steigerungsregel und ist ein Antippen statt einer Zahl pro Satz.
+4. **Specs im öffentlichen GitHub-Repo:** ja. **Echte Plan-Dateien und
+   Protokolle kommen nie ins Repo**, die liegen nur auf PC und Handy.
 
 ## 9. Wünsche aus dem neuen Plan-Konzept (Trainingsplan-Spec 006, 4.7)
 
@@ -171,19 +188,21 @@ Nach Schritt 4, in dieser Reihenfolge:
 bestätigten Satz (aus `restSec`) · Hinweis „oberes Ende in allen Sätzen
 geschafft → nächste Woche schwerer“ · freie Zusatz-Einheit ohne Plan.
 
-## 8. Geklärte Fragen (2026-09-28)
+## 10. Import-Korrektur (2026-10-29, Version 21)
 
-1. **Alte Challenge-Funktionen** (Workouts wie „Meltdown“, Übungszähler,
-   Rekorde, Ruhetag-Varianten, Trainingsquote, Challenge-Badge):
-   **Archiv.** Die Daten bleiben im Verlauf und im Excel-Export. Sobald ein
-   Plan importiert ist, verschwindet die alte Trainings-Karte von der
-   Heute-Seite (ab Schritt 1) und der Challenge-Badge wird zum Countdown.
-   Erfolge und Verwalten räumt Schritt 5 auf.
-2. **Plan-Karte oben auf Heute, Details auf eigener Seite:** ja.
-3. **„Im Tank“ entfällt.** Pro Satz werden nur Wiederholungen bzw.
-   Sekunden (und ggf. kg) abgefragt. Stattdessen gibt es pro Übung ein
-   freiwilliges **Gefühl** mit drei Knöpfen: „zu hart“ · „genau richtig“ ·
-   „hätte schwerer sein können“ (Vorschlag des Nutzers). Das reicht für die
-   Steigerungsregel und ist ein Antippen statt einer Zahl pro Satz.
-4. **Specs im öffentlichen GitHub-Repo:** ja. **Echte Plan-Dateien und
-   Protokolle kommen nie ins Repo**, die liegen nur auf PC und Handy.
+Beobachtung des Nutzers: „Ein neuer Plan überschreibt den alten nicht.“
+Ursachen nach Nachstellen mit den echten Dateien:
+
+1. Eine Datei ersetzt nur Tage **in ihrem Zeitraum**. Die November-Datei
+   (02.–29.11.) ließ deshalb 21 Tage des alten Plans „Startpaket +
+   Phase 1“ (30.11.–20.12.) stehen.
+2. Wochen, deren Tage alle ersetzt waren, blieben als „Geister-Wochen“
+   (z. B. „Woche 2: Eingangstest“ mit nur einem Tag).
+
+Lösung:
+- Wochen ohne Tage werden bei jedem Import und beim Start entfernt.
+- Liegen nach dem Ende der neuen Datei noch Tage eines älteren Plans, bietet
+  der Import-Dialog „Diese Tage entfernen“ an (nicht vorausgewählt, weil
+  kleine Zusatz-Dateien wie die Fitness-Analyse den Rest nicht löschen
+  dürfen). Ältere Importe werden dabei auf das neue Ende gekürzt.
+- Ergebnisse werden weiterhin nie gelöscht.

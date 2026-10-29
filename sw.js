@@ -1,5 +1,5 @@
 /* Service Worker – App-Shell offline verfügbar machen */
-const CACHE = 'fitness-tracker-v20';
+const CACHE = 'fitness-tracker-v21';
 
 const ASSETS = [
   './',

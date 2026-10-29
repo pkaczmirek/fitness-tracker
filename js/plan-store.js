@@ -48,7 +48,7 @@
       if (!raw) return emptyStore();
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || !parsed.days) return emptyStore();
-      return Object.assign(emptyStore(), parsed);
+      return pruneWeeks(Object.assign(emptyStore(), parsed));
     } catch (e) {
       return emptyStore();
     }
@@ -80,11 +80,26 @@
       .filter((d) => d >= plan.range.from && d <= plan.range.to).length;
   }
 
-  /* Liefert einen neuen Speicher; der alte bleibt unverändert */
-  function applyImport(store, plan, importedAt) {
+  /* Wochen ohne einen einzigen Tag entfernen (z. B. nach Ersetzen durch einen neueren Plan) */
+  function pruneWeeks(store) {
+    const used = new Set(Object.values(store.days).map((d) => d.week));
+    for (const id of Object.keys(store.weeks)) if (!used.has(id)) delete store.weeks[id];
+    return store;
+  }
+
+  /* Tage NACH dem Zeitraum der Datei, die aus älteren Importen stammen */
+  function laterDays(store, plan) {
+    const keys = Object.keys(store.days).filter((d) => d > plan.range.to).sort();
+    return { count: keys.length, from: keys[0] || null, to: keys[keys.length - 1] || null };
+  }
+
+  /* Liefert einen neuen Speicher; der alte bleibt unverändert.
+     opts.dropAfter: auch alle Tage nach dem Zeitraum der Datei entfernen */
+  function applyImport(store, plan, importedAt, opts) {
+    const dropAfter = !!(opts && opts.dropAfter);
     const next = JSON.parse(JSON.stringify(store));
     for (const d of Object.keys(next.days)) {
-      if (d >= plan.range.from && d <= plan.range.to) delete next.days[d];
+      if ((d >= plan.range.from && d <= plan.range.to) || (dropAfter && d > plan.range.to)) delete next.days[d];
     }
     for (const day of plan.days) next.days[day.date] = day;
     for (const e of plan.exercises) next.exercises[e.id] = e;
@@ -93,6 +108,13 @@
     for (const g of plan.guides || []) next.guides[g.id] = g;
     Object.assign(next.places, plan.places);
     next.event = plan.event;
+    if (dropAfter) {
+      // Ältere Importe enden jetzt spätestens dort, wo die neue Datei endet
+      next.imports = next.imports.filter((i) => i.range.from <= plan.range.to);
+      for (const i of next.imports) {
+        if (i.range.to > plan.range.to) i.range = { from: i.range.from, to: plan.range.to };
+      }
+    }
     // Gleicher Plan-Teil oder komplett überdeckter Zeitraum: alter Eintrag entfällt
     next.imports = next.imports.filter((i) => i.planId !== plan.planId &&
       !(i.range.from >= plan.range.from && i.range.to <= plan.range.to));
@@ -104,7 +126,7 @@
       importedAt
     });
     next.imports.sort((a, b) => a.range.from.localeCompare(b.range.from));
-    return next;
+    return pruneWeeks(next);
   }
 
   /* ---------- Abfragen ---------- */
@@ -238,7 +260,7 @@
   const api = {
     PLAN_KEY, emptyStore, load, save, isStore,
     fromKey, toKey, addDays, daysBetween,
-    existingIds, countReplaced, applyImport,
+    existingIds, countReplaced, applyImport, pruneWeeks, laterDays,
     hasPlan, bounds, weekList, weekDates, weekForDate, initialWeek, variantOf,
     rangeText, secondsText, minutesText, restText, targetText, weekTypeText
   };

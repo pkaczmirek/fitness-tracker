@@ -145,3 +145,67 @@ test('Bekannte Testrunden aus Plan und Ergebnissen', () => {
   assert.ok(rounds.includes('Fitness-Analyse'));
   assert.equal(new Set(rounds).size, rounds.length, 'keine Doppelten');
 });
+
+function sampleLog() {
+  const log = PL.emptyLog();
+  log.sessions['2026-10-02-1'] = {
+    sessionId: '2026-10-02-1', plannedDate: '2026-10-02', date: '2026-10-02', title: 'Übungen kennenlernen',
+    variant: 'normal', status: 'done', effort: 4, minutes: 27, note: 'gut', items: [
+      { exercise: 'A1', planned: { minutes: 5 }, done: true },
+      { exercise: 'U1', planned: { sets: 3, seconds: 15, restSec: 90 }, rows: [
+        { seconds: 18, done: true }, { seconds: 16, done: true }, { seconds: 15, done: false }], variant: 'Tür', feel: 'right' },
+      { exercise: 'U2', planned: { sets: 2, reps: 5 }, rows: [{ reps: 5, done: false }, { reps: 5, done: false }], feel: null },
+      null
+    ] };
+  log.sessions['2026-10-03-1'] = {
+    sessionId: '2026-10-03-1', plannedDate: '2026-10-03', date: '2026-10-03', title: 'Lauf', variant: 'normal',
+    status: null, effort: null, minutes: null, note: '', items: [
+      null, { exercise: 'U20', planned: { minutes: [25, 35] }, cardio: { minutes: 31, km: 4.6, pulse: 142, effort: null, done: true }, feel: null }] };
+  log.sessions['2026-10-09-1'] = {
+    sessionId: '2026-10-09-1', plannedDate: '2026-10-09', date: '2026-10-09', title: 'Treppe', variant: 'normal',
+    status: 'skipped', effort: null, minutes: null, note: 'Regen', items: [] };
+  log.tests.push({ id: 'x1', test: 'T1', date: '2026-10-12', round: 'Eingangstest', sessionId: '2026-10-12-1', values: { seconds: 42 }, note: '', updatedAt: 'z' });
+  return log;
+}
+
+test('Trainingsprotokoll im Format 2', () => {
+  const log = sampleLog();
+  const moves = { '2026-10-03-1': '2026-10-04' };
+  const daily = [{ date: '2026-10-02', weight: 82.4 }];
+  const p = PL.buildProtocol({ store, log, index, moves, daily, appVersion: 21, now: '2026-10-29T10:00:00' });
+  assert.equal(p.format, 'trainingsprotokoll');
+  assert.equal(p.formatVersion, 1);
+  assert.equal(p.appVersion, 21);
+  assert.deepEqual(p.plans.map((x) => x.planId), ['beispiel-startpaket']);
+  assert.deepEqual(p.sessions.map((s) => s.sessionId), ['2026-10-02-1', '2026-10-03-1', '2026-10-09-1']);
+  const s1 = p.sessions[0];
+  assert.equal(s1.status, 'done');
+  assert.equal(s1.effort, 4);
+  assert.deepEqual(s1.items, [
+    { exercise: 'A1', planned: { minutes: 5 }, done: true },
+    { exercise: 'U1', planned: { sets: 3, seconds: 15, restSec: 90 }, sets: [{ seconds: 18 }, { seconds: 16 }], variant: 'Tür', feel: 'right' }
+  ], 'nur bestätigte Sätze, unberührte Übungen fehlen');
+  const s2 = p.sessions[1];
+  assert.equal(s2.date, '2026-10-04', 'Verschiebung berücksichtigt');
+  assert.equal(s2.plannedDate, '2026-10-03');
+  assert.equal(s2.status, 'started', 'Werte ohne Abschluss');
+  assert.deepEqual(s2.items[0].cardio, { minutes: 31, km: 4.6, pulse: 142 });
+  assert.equal(p.sessions[2].status, 'skipped');
+  assert.equal(p.sessions[2].note, 'Regen');
+  assert.deepEqual(p.tests, [{ test: 'T1', date: '2026-10-12', round: 'Eingangstest', sessionId: '2026-10-12-1', values: { seconds: 42 }, note: '' }]);
+  assert.deepEqual(p.daily, daily);
+});
+
+test('Erfolgsquote Plan-Einheiten', () => {
+  const log = sampleLog();
+  // Pflicht-Einheiten im Beispiel: 08.10., 09.10., 12.10., 13.10. (02./03./07.10. sind freiwillig)
+  const st = PL.planStats(store, index, {}, log, '2026-10-12');
+  assert.equal(st.planned, 2, '08.10. und 09.10.; der 12.10. ist heute und noch offen');
+  assert.equal(st.skipped, 1);
+  assert.equal(st.missed, 1);
+  assert.equal(st.done, 0);
+  log.sessions['2026-10-12-1'] = { sessionId: '2026-10-12-1', status: 'done', items: [] };
+  const st2 = PL.planStats(store, index, {}, log, '2026-10-12');
+  assert.equal(st2.planned, 3, 'heute erledigt zählt mit');
+  assert.equal(st2.done, 1);
+});

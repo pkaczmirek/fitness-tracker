@@ -322,7 +322,7 @@ neueste Datei ersetzt also alle älteren. Dateiname:
   "formatVersion": 1,
   "exportedAt": "2026-10-18T20:15:00",
   "appVersion": 13,
-  "plans": [ { "planId": "startpaket", "title": "…", "importedAt": "2026-09-30" } ],
+  "plans": [ { "planId": "startpaket", "title": "…", "importedAt": "2026-09-30", "range": { "from": "2026-10-01", "to": "2026-10-18" } } ],
   "sessions": [ … ],
   "tests": [ … ],
   "daily": [ … ]
@@ -377,7 +377,7 @@ Plan-Datei.
 |---|---|
 | `plannedDate` / `date` | geplanter und tatsächlicher Tag (unterscheiden sich nach Verschieben) |
 | `variant` (Einheit) | `"normal"`, `"short"` oder `"home"` |
-| `status` | `"done"` (erledigt), `"partial"` (teilweise), `"skipped"` (ausgelassen) |
+| `status` | `"done"` (erledigt), `"partial"` (teilweise), `"skipped"` (ausgelassen), `"started"` (Werte eingetragen, aber nicht abgeschlossen) |
 | `effort` / `minutes` / `note` | Gesamt-Anstrengung 1–10, tatsächliche Dauer, Notiz (alle optional) |
 | `planned` | Kopie des Plan-Werts zum Zeitpunkt des Trainings |
 | `variant` (Übung) | gewählte Variante als Freitext („Hände auf Stufe“, „Rucksack 5 kg“) |

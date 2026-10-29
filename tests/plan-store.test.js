@@ -102,3 +102,55 @@ test('Datums-Hilfen', () => {
   assert.equal(PS.daysBetween('2026-09-28', '2027-06-26'), 271);
   assert.equal(PS.addDays('2026-10-25', 1), '2026-10-26', 'Zeitumstellung');
 });
+
+// Ein späterer, kürzerer Plan: ersetzt 05.10.–11.10., eigene Woche, Tag ohne Woche SP1 mehr
+function laterPlan(over) {
+  return Object.assign({
+    format: 'trainingsplan', formatVersion: 1, planId: 'neu', title: 'Neu', createdAt: '2026-10-04',
+    range: { from: '2026-10-05', to: '2026-10-11' }, event: example.event, places: {}, exercises: [],
+    weeks: [{ id: 'N1', title: 'Neue Woche', phase: 'Neu', types: ['build'], start: '2026-10-05' }],
+    days: [{ date: '2026-10-05', week: 'N1', sessions: [] }]
+  }, over || {});
+}
+
+test('Verwaiste Wochen verschwinden beim Import', () => {
+  let s = PS.applyImport(PS.emptyStore(), example, '2026-09-28');
+  assert.ok(s.weeks.SP1);
+  s = PS.applyImport(s, laterPlan(), '2026-10-04');
+  assert.equal(s.weeks.SP1, undefined, 'SP1 hat keine Tage mehr');
+  assert.ok(s.weeks.N1);
+  assert.ok(s.weeks.SP0 && s.weeks.SP2, 'Wochen mit Tagen bleiben');
+});
+
+test('Aufräumen beim Laden entfernt verwaiste Wochen', () => {
+  const s = PS.applyImport(PS.emptyStore(), example, '2026-09-28');
+  s.weeks.GHOST = { id: 'GHOST', title: 'Geist', phase: 'x', types: ['build'], start: '2026-10-12' };
+  const storage = { getItem: () => JSON.stringify(s) };
+  const loaded = PS.load(storage);
+  assert.equal(loaded.weeks.GHOST, undefined);
+  assert.ok(loaded.weeks.SP2);
+});
+
+test('Spätere Tage aus älterem Plan: zählen und auf Wunsch entfernen', () => {
+  let s = PS.applyImport(PS.emptyStore(), example, '2026-09-28');
+  const p = laterPlan();
+  const later = PS.laterDays(s, p);
+  assert.equal(later.count, 2, '12.10. und 13.10. liegen danach');
+  assert.equal(later.from, '2026-10-12');
+  assert.equal(later.to, '2026-10-13');
+  const keep = PS.applyImport(s, p, '2026-10-04');
+  assert.ok(keep.days['2026-10-12'], 'ohne Option bleiben sie');
+  const drop = PS.applyImport(s, p, '2026-10-04', { dropAfter: true });
+  assert.equal(drop.days['2026-10-12'], undefined);
+  assert.equal(drop.weeks.SP2, undefined, 'deren Woche wird verwaist');
+  assert.ok(drop.days['2026-10-02'], 'Tage davor bleiben');
+  const old = drop.imports.find((i) => i.planId === 'beispiel-startpaket');
+  assert.equal(old.range.to, '2026-10-11', 'alter Import endet jetzt beim neuen Ende');
+});
+
+test('Nach dem Kürzen komplett überdeckter Import verschwindet aus der Liste', () => {
+  let s = PS.applyImport(PS.emptyStore(), example, '2026-09-28');
+  const p = laterPlan({ range: { from: '2026-10-01', to: '2026-10-08' }, days: [{ date: '2026-10-05', week: 'N1', sessions: [] }] });
+  s = PS.applyImport(s, p, '2026-10-04', { dropAfter: true });
+  assert.deepEqual(s.imports.map((i) => i.planId), ['neu']);
+});

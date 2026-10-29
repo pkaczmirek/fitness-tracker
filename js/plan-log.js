@@ -289,6 +289,94 @@
     return [...set];
   }
 
+  /* ---------- Trainingsprotokoll (Format-Abschnitt 2, Schritt 4) ---------- */
+
+  function pick(obj, keys) {
+    const out = {};
+    for (const k of keys) if (obj[k] != null && obj[k] !== '') out[k] = obj[k];
+    return out;
+  }
+
+  /* Ein Eintrag im Exportformat; null, wenn nichts eingetragen ist */
+  function exportItem(it) {
+    if (!itemHasData(it)) return null;
+    if (it.test != null) return { test: it.test, done: !!it.done };
+    if (it.text != null) {
+      const o = { text: it.text, done: !!it.done };
+      if (it.value != null && it.value !== '') o.value = it.value;
+      return o;
+    }
+    const o = { exercise: it.exercise };
+    if (it.planned && Object.keys(it.planned).length) o.planned = it.planned;
+    if (it.rows) {
+      const sets = rowsDone(it).map((r) => pick(r, ['reps', 'seconds', 'minutes', 'kg', 'rounds']));
+      if (sets.length) o.sets = sets;
+    } else if (it.cardio) {
+      if (it.cardio.done) o.cardio = pick(it.cardio, ['minutes', 'km', 'pulse', 'effort']);
+    } else {
+      o.done = !!it.done;
+    }
+    Object.assign(o, pick(it, ['variant', 'feel', 'effort', 'note']));
+    return o;
+  }
+
+  /* opts: { store, log, index, moves, daily, appVersion, now } */
+  function buildProtocol(opts) {
+    const { store, log, index, moves } = opts;
+    const sessions = [];
+    for (const r of Object.values(log.sessions)) {
+      const items = (r.items || []).map(exportItem).filter(Boolean);
+      if (!items.length && !r.status && r.effort == null && !r.note) continue;
+      const s = {
+        sessionId: r.sessionId,
+        plannedDate: r.plannedDate,
+        date: effectiveDate(index, moves, r.sessionId) || r.date,
+        title: r.title,
+        variant: r.variant || 'normal',
+        // "started": Werte eingetragen, aber (noch) nicht abgeschlossen
+        status: r.status || 'started'
+      };
+      Object.assign(s, pick(r, ['effort', 'minutes', 'note']));
+      s.items = items;
+      sessions.push(s);
+    }
+    sessions.sort((a, b) => (a.date === b.date ? a.sessionId.localeCompare(b.sessionId) : a.date.localeCompare(b.date)));
+
+    const tests = (log.tests || [])
+      .map((r) => ({ test: r.test, date: r.date, round: r.round || null, sessionId: r.sessionId || null, values: r.values, note: r.note || '' }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.test.localeCompare(b.test, 'de', { numeric: true }));
+
+    return {
+      format: 'trainingsprotokoll',
+      formatVersion: 1,
+      exportedAt: opts.now,
+      appVersion: opts.appVersion,
+      plans: (store.imports || []).map((i) => ({ planId: i.planId, title: i.title, importedAt: i.importedAt, range: i.range })),
+      sessions,
+      tests,
+      daily: opts.daily || []
+    };
+  }
+
+  /* Pflicht-Einheiten bis heute: erledigt / teilweise / ausgelassen / nicht eingetragen.
+     Heute zählt erst mit, wenn schon etwas eingetragen ist. */
+  function planStats(store, index, moves, log, today) {
+    const st = { planned: 0, done: 0, partial: 0, skipped: 0, missed: 0 };
+    for (const [id, hit] of index) {
+      if (hit.session.optional) continue;
+      const date = moves[id] || hit.date;
+      if (date > today) continue;
+      const state = sessionState(log.sessions[id], date, today, false);
+      if (date === today && state === 'open') continue;
+      st.planned++;
+      if (state === 'done') st.done++;
+      else if (state === 'partial' || state === 'started') st.partial++;
+      else if (state === 'skipped') st.skipped++;
+      else st.missed++;
+    }
+    return st;
+  }
+
   /* "12,5" oder "12.5" → 12.5; leer → null */
   function parseNum(s) {
     if (s == null) return null;
@@ -305,7 +393,8 @@
     rowsDone, itemMeasured, itemHasData, hasData, sessionState,
     lastExerciseResult, prefillValue, newItemResult, matchesItem,
     lastText, parseNum,
-    testResults, lastTestResult, sessionTestResult, formatTestValue, testSummary, hasTestValue, testRounds
+    testResults, lastTestResult, sessionTestResult, formatTestValue, testSummary, hasTestValue, testRounds,
+    exportItem, buildProtocol, planStats
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PlanLog = api;
