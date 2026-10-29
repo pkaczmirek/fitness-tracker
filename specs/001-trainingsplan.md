@@ -1,9 +1,10 @@
 # Spec 001: Trainingsplan in der App
 
-Status: 2026-09-28: Format festgelegt
-([format-trainingsplan-v1.md](format-trainingsplan-v1.md)), Fragen geklärt
-(Abschnitt 8). **Schritt 1 abgenommen (Version 14). Schritt 2 umgesetzt (Version 15),
-wartet auf Abnahme.** Nächster Schritt: 3 (Tests, bis 12.10.).
+Status: 2026-10-29: Schritte 1 und 2 im Einsatz (bis Version 19).
+**Schritt 3 (Tests) umgesetzt in Version 20, wartet auf Abnahme.** Neue
+Reihenfolge laut Trainingsplan-Spec 006, 4.7: als Nächstes Schritt 4
+(Export, nötig bis Mo 16.11.), danach die Wünsche „Zirkel-Anzeige“ und
+„Mini-Routine“ (Abschnitt 9).
 
 Gegenstück im Trainingsplan-Projekt:
 `D:\dev\Trainingsplan\specs\004-app-anbindung.md`
@@ -137,8 +138,8 @@ auf dem Handy abgenommen.
 |---|---|---|
 | **1. Plan sehen** | Import mit Prüfung · Plan-Speicher + Backup · Heute-Karte + Einheit-Seite mit Umschalter (nur ansehen) · Spickzettel · Plan-Tab mit Woche und Infos · Countdown | **Do 01.10.** (erster Tag Startpaket) |
 | **2. Eintragen** | Satz für Satz (alle Übungsarten, Schritte mit Notierfeld) · Vorbelegung · letzte Werte · Abschluss/Status · Verschieben/Tauschen | **Fr 02.10.** (erste Einheit mit Sätzen) |
-| **3. Tests** | Test-Masken · nachträglich ergänzen · Tests-Übersicht mit Tabelle und Kurve | **Mo 12.10.** (Eingangstest) |
-| **4. Export** | Trainingsprotokoll (JSON) · Excel-Blätter · Erfolgsquote „Plan-Einheiten erledigt“ | **So 18.10.** (Auswertung Eingangstest) |
+| **3. Tests** ✅ v20 | Test-Masken für alle Messwert-Arten (auch min:s, ja/nein, 0–10, Text) · Eintragen in der Einheit **und** im Plan-Tab „Tests“ (zum Nachtragen, z. B. Fitness-Analyse vom 09./10.10.) · Bearbeiten/Löschen · Verlauf je Test mit Kurve, gestrichelter Zielmarke und Tabelle · „Neue Bestmarke“ / „Zielmarke erreicht“ | **Mo 07.12.** (Test 2; ursprünglich 12.10.) |
+| **4. Export** | Trainingsprotokoll (JSON) · Excel-Blätter · Erfolgsquote „Plan-Einheiten erledigt“ | **Mo 16.11.** (erster Plan-Check, Spec 005 im Trainingsplan-Projekt) |
 | **5. Aufräumen** | Umgang mit den alten Challenge-Funktionen (Frage 8.1) · kleinere Wünsche aus den ersten Wochen | danach |
 
 **Parallel im Trainingsplan-Projekt:** Plan-Datei für das **Startpaket**
@@ -152,6 +153,19 @@ erzeugen (vor Phase 1), mit `tools/check-plan.js` prüfen, dann aufs Handy.
   am Inhalt macht Claude im Trainingsplan-Projekt.
 - Pro Satz **ein** Wert, auch bei Übungen je Seite. Unterschiede zwischen
   links und rechts gehören in die Notiz.
+
+## 9. Wünsche aus dem neuen Plan-Konzept (Trainingsplan-Spec 006, 4.7)
+
+Nach Schritt 4, in dieser Reihenfolge:
+
+1. **Zirkel-Anzeige** für „Runden auf Zeit“ und „feste Runden“: mehrere
+   Übungen als ein Block mit Zeit bzw. Rundenzahl, am Ende ein Feld für die
+   geschafften Runden bzw. die Zeit, statt jede Übung einzeln einzutragen.
+   Bis dahin schreibt das Trainingsplan-Projekt Zirkel als Schritt mit
+   Notierfeld („Runden“ bzw. „Zeit“), darunter die Übungen.
+2. **Mini-Routine** als kurze zweite Einheit am Tag, mit Hinweis „morgens
+   oder abends“. (Mehrere Einheiten pro Tag kann das Format schon; die
+   November-Datei nutzt das an 24 Tagen.)
 
 **Ideen für später** (nicht Teil dieser Spec): Pausen-Timer nach jedem
 bestätigten Satz (aus `restSec`) · Hinweis „oberes Ende in allen Sätzen

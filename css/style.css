@@ -993,3 +993,44 @@ body.page-open { overflow: hidden; }
 .finish-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .finish-row .num-field { margin-top: 8px; }
 .reset-btn { display: block; margin: 12px auto 0; }
+
+/* ===== Trainingsplan: Tests (Schritt 3) ===== */
+.test-own {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--good);
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.test-enter-btn { margin-top: 8px; font-size: 0.85rem; padding: 7px 12px; }
+
+.test-fields { display: flex; flex-direction: column; gap: 10px; }
+.test-field select { display: block; width: 100%; font: inherit; font-size: 1rem; margin-top: 4px; padding: 9px 10px; border: 1px solid var(--baseline); border-radius: 10px; background: transparent; color: var(--ink-1); }
+.minsec-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-weight: 500; }
+.dialog-form .minsec-row input { width: 70px; margin-top: 0; text-align: center; }
+.test-delete { margin-right: auto; }
+
+.test-row .lib-name { display: flex; flex-direction: column; }
+.test-row-sub { font-size: 0.75rem; color: var(--ink-muted); margin-top: 1px; }
+.test-row-last { font-size: 0.85rem; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.test-history-info .hint { margin-top: 0; }
+.test-howto { font-size: 0.85rem; color: var(--ink-2); margin: 4px 0 8px; }
+.test-howto summary { cursor: pointer; font-weight: 600; color: var(--primary); }
+.test-howto p { margin-top: 4px; line-height: 1.4; }
+
+.test-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 6px; }
+.test-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 6px 4px 0;
+  border-bottom: 1px solid var(--baseline);
+}
+.test-table td { padding: 8px 6px 8px 0; border-bottom: 1px solid var(--grid); vertical-align: top; font-variant-numeric: tabular-nums; }
+.test-table tbody tr { cursor: pointer; }
+.test-table td:first-child { white-space: nowrap; }
+#testHistoryDialog { width: min(94vw, 480px); }

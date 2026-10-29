@@ -8,7 +8,7 @@
   const STORAGE_KEY = 'fitness-tracker:v1';
 
   // Muss zur CACHE-Version in sw.js passen (bei jedem Release beide hochzählen)
-  const APP_VERSION = 19;
+  const APP_VERSION = 20;
 
   // Nur noch für die Migration alter Daten (Version 1) benötigt
   const MEAL_TYPES_V1 = ['breakfast', 'lunch', 'dinner', 'snacks'];
@@ -960,7 +960,8 @@
     const allKeys = [...new Set(cfg.series.flatMap((s) => s.entries.map((e) => e.key)))].sort();
     if (allKeys.length < 2) return;
 
-    const W = 640, H = 260;
+    // Zeichenfläche: kleinere Werte = größere Schrift (z. B. im Dialog)
+    const W = cfg.width || 640, H = cfg.height || 260;
     const PAD = { l: 44, r: 16, t: 16, b: 30 };
     const iw = W - PAD.l - PAD.r;
     const ih = H - PAD.t - PAD.b;
@@ -969,6 +970,9 @@
     const t1 = fromKey(allKeys[allKeys.length - 1]).getTime();
     const span = Math.max(t1 - t0, 1);
     const values = cfg.series.flatMap((s) => s.entries.map((e) => e.value));
+    if (cfg.target) values.push(cfg.target.value);
+    // Optionale eigene Formatierung (z. B. Sekunden als m:ss)
+    const fv = cfg.formatValue || ((v) => `${fmt(v, cfg.digits)}${cfg.unit ? " " + cfg.unit : ""}`);
     let yMin = Math.min(...values), yMax = Math.max(...values);
     const padY = Math.max((yMax - yMin) * 0.15, cfg.minPad != null ? cfg.minPad : 0.5);
     yMin -= padY; yMax += padY;
@@ -1001,7 +1005,7 @@
         fill: 'var(--ink-muted)', 'font-size': 11,
         style: 'font-variant-numeric: tabular-nums'
       });
-      label.textContent = fmt(v, cfg.digits);
+      label.textContent = cfg.axisFormat ? cfg.axisFormat(v) : fmt(v, cfg.digits);
       svg.append(label);
     }
 
@@ -1014,6 +1018,18 @@
       });
       label.textContent = fromKey(k).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
       svg.append(label);
+    }
+
+    // Ziellinie (gestrichelt, direkt beschriftet)
+    if (cfg.target) {
+      const ty = yOf(cfg.target.value);
+      svg.append(S("line", {
+        x1: PAD.l, x2: W - PAD.r, y1: ty, y2: ty,
+        stroke: "var(--good)", "stroke-width": 1.5, "stroke-dasharray": "6 5"
+      }));
+      const tl = S("text", { x: PAD.l + 4, y: ty - 6, fill: "var(--good)", "font-size": 12, "font-weight": 700 });
+      tl.textContent = cfg.target.label;
+      svg.append(tl);
     }
 
     // Linien
@@ -1047,7 +1063,7 @@
         'font-size': 12, 'font-weight': 700,
         style: 'font-variant-numeric: tabular-nums'
       });
-      t.textContent = `${fmt(last.value, cfg.digits)}${cfg.unit ? ' ' + cfg.unit : ''}`;
+      t.textContent = fv(last.value);
       svg.append(t);
     }
 
@@ -1083,7 +1099,7 @@
       for (const s of cfg.series) {
         const e = s.entries.find((x) => x.key === best);
         if (e) {
-          parts.push(`${s.tipLabel || ''}${fmt(e.value, cfg.digits)}${cfg.unit ? ' ' + cfg.unit : ''}`);
+          parts.push(`${s.tipLabel || ''}${fv(e.value)}`);
           anchorY = yOf(e.value);
         }
       }
@@ -2146,12 +2162,16 @@
     const it = ctx.items[idx];
     const li = el('li', { class: 'session-item' });
     if (it.exercise != null) renderExerciseItem(li, ctx, idx, it);
-    else if (it.test != null) renderTestItem(li, it);
+    else if (it.test != null) renderTestItem(li, ctx, idx, it);
     else renderStepItem(li, ctx, idx, it);
     return li;
   }
 
-  function renderTestItem(li, it) {
+  function testResultLine(t, r) {
+    return `${formatDayShort(r.date)}${r.round ? ', ' + r.round : ''}: ${PlanLog.testSummary(t, r.values)}`;
+  }
+
+  function renderTestItem(li, ctx, idx, it) {
     const t = plan.tests[it.test];
     li.classList.add('is-test');
     li.append(el('button', {
@@ -2160,7 +2180,20 @@
     }, `🧪 ${it.test}${t ? ' ' + t.name : ''}`));
     if (t && t.target) li.append(el('div', { class: 'item-target' }, `Zielmarke: ${t.target.text}`));
     if (it.note) li.append(el('div', { class: 'item-note' }, it.note));
-    li.append(el('div', { class: 'item-note' }, 'Test-Werte eintragen: kommt mit dem nächsten Update (vor dem Eingangstest).'));
+    if (!t) return;
+    const last = PlanLog.lastTestResult(data.planLog, it.test, ctx.s.id, ctx.date);
+    if (last) li.append(el('div', { class: 'item-last' }, `↩ Letztes Mal (${testResultLine(t, last)})`));
+    const own = PlanLog.sessionTestResult(data.planLog, ctx.s.id, it.test);
+    if (own) {
+      li.classList.add('is-done');
+      li.append(el('div', { class: 'test-own' }, `✓ ${PlanLog.testSummary(t, own.values)}`));
+    }
+    li.append(el('button', {
+      type: 'button', class: 'btn test-enter-btn' + (own ? '' : ' btn-primary'),
+      onclick: () => openTestDialog(it.test, {
+        ctx, idx, resultId: own ? own.id : null, date: ctx.date, round: ctx.s.testRound || ''
+      })
+    }, own ? 'Ergebnis bearbeiten' : '🧪 Ergebnis eintragen'));
   }
 
   function renderStepItem(li, ctx, idx, it) {
@@ -2432,6 +2465,263 @@
     if (openSession) renderSessionPage();
   }
 
+  /* ---------- Tests eintragen (Schritt 3) ---------- */
+
+  let testEdit = null;    // { testId, resultId, ctx, idx } des offenen Test-Dialogs
+  let historyTestId = null; // Test im offenen Verlaufs-Dialog
+
+  function testFieldInput(f, value) {
+    const label = el('label', { class: 'test-field' }, f.label);
+    if (f.type === 'minsec') {
+      const m = value != null ? Math.floor(value / 60) : '';
+      const s = value != null ? Math.round(value % 60) : '';
+      label.append(el('span', { class: 'minsec-row' },
+        el('input', { type: 'text', inputmode: 'numeric', 'data-key': f.key, 'data-part': 'm', value: String(m), 'aria-label': `${f.label}: Minuten` }),
+        el('span', null, 'min'),
+        el('input', { type: 'text', inputmode: 'numeric', 'data-key': f.key, 'data-part': 's', value: String(s), 'aria-label': `${f.label}: Sekunden` }),
+        el('span', null, 's')));
+      return label;
+    }
+    if (f.type === 'scale10' || f.type === 'yesno') {
+      const sel = el('select', { 'data-key': f.key });
+      const opts = f.type === 'yesno'
+        ? [['', '–'], ['yes', 'ja'], ['no', 'nein']]
+        : [['', '–'], ...Array.from({ length: 11 }, (_, n) => [String(n), String(n)])];
+      for (const [v, txt] of opts) sel.append(el('option', { value: v }, txt));
+      if (value != null) sel.value = f.type === 'yesno' ? (value ? 'yes' : 'no') : String(value);
+      label.append(sel);
+      return label;
+    }
+    const isText = f.type === 'text';
+    const input = el('input', {
+      type: 'text', 'data-key': f.key, maxlength: 120,
+      inputmode: isText ? 'text' : (f.type === 'km' ? 'decimal' : 'numeric')
+    });
+    input.value = value == null ? '' : (isText ? value : String(value).replace('.', ','));
+    label.append(input);
+    return label;
+  }
+
+  function readTestValues(t) {
+    const box = $('#testFields');
+    const vals = {};
+    for (const f of t.fields) {
+      const els = [...box.querySelectorAll('[data-key]')].filter((e) => e.dataset.key === f.key);
+      let v = null;
+      if (f.type === 'minsec') {
+        const m = PlanLog.parseNum(els.find((e) => e.dataset.part === 'm').value);
+        const s = PlanLog.parseNum(els.find((e) => e.dataset.part === 's').value);
+        if (m != null || s != null) v = (m || 0) * 60 + (s || 0);
+      } else if (f.type === 'yesno') {
+        v = els[0].value === '' ? null : els[0].value === 'yes';
+      } else if (f.type === 'text') {
+        v = els[0].value.trim() || null;
+      } else {
+        v = PlanLog.parseNum(els[0].value);
+      }
+      if (v != null) vals[f.key] = v;
+    }
+    return vals;
+  }
+
+  function openTestDialog(testId, opts) {
+    const t = plan.tests[testId];
+    if (!t) return;
+    const existing = opts.resultId ? data.planLog.tests.find((r) => r.id === opts.resultId) : null;
+    testEdit = { testId, resultId: existing ? existing.id : null, ctx: opts.ctx || null, idx: opts.idx };
+
+    $('#testDialogTitle').textContent = `🧪 ${t.id} ${t.name}`;
+    const others = PlanLog.testResults(data.planLog, testId).filter((r) => !existing || r.id !== existing.id);
+    const info = [];
+    if (t.target) info.push(`Zielmarke: ${t.target.text}`);
+    if (others.length) info.push(`Letztes Mal (${testResultLine(t, others[others.length - 1])})`);
+    $('#testDialogInfo').textContent = info.join(' · ');
+
+    const box = $('#testFields');
+    box.innerHTML = '';
+    const values = existing ? existing.values : {};
+    for (const f of t.fields) box.append(testFieldInput(f, values[f.key]));
+
+    $('#testDate').value = existing ? existing.date : (opts.date || todayKey());
+    $('#testRound').value = existing ? (existing.round || '') : (opts.round || '');
+    const dl = $('#testRoundList');
+    dl.innerHTML = '';
+    for (const r of PlanLog.testRounds(plan, data.planLog)) dl.append(el('option', { value: r }));
+    $('#testNote').value = existing ? (existing.note || '') : '';
+    $('#testDelete').hidden = !existing;
+    $('#testDialog').showModal();
+  }
+
+  /* Bestwert vor diesem Ergebnis (für "Neue Bestmarke") */
+  function bestBefore(t, excludeId) {
+    const vals = data.planLog.tests
+      .filter((r) => r.test === t.id && r.id !== excludeId && typeof r.values[t.main] === 'number')
+      .map((r) => r.values[t.main]);
+    if (!vals.length) return null;
+    return t.better === 'lower' ? Math.min(...vals) : Math.max(...vals);
+  }
+
+  /* Test-Eintrag in der Einheit als erledigt markieren (oder zurücknehmen) */
+  function markTestItem(sessionId, testId, done) {
+    const r = data.planLog.sessions[sessionId];
+    if (!r) return;
+    for (const it of r.items || []) if (it && it.test === testId) it.done = done;
+  }
+
+  function submitTestDialog(ev) {
+    ev.preventDefault();
+    const t = plan.tests[testEdit.testId];
+    const values = readTestValues(t);
+    if (!PlanLog.hasTestValue(values)) { toast('Bitte mindestens einen Wert eintragen'); return; }
+    let r = testEdit.resultId ? data.planLog.tests.find((x) => x.id === testEdit.resultId) : null;
+    if (!r) {
+      r = { id: uid(), test: t.id, sessionId: testEdit.ctx ? testEdit.ctx.s.id : null };
+      data.planLog.tests.push(r);
+    }
+    Object.assign(r, {
+      date: $('#testDate').value || todayKey(),
+      round: $('#testRound').value.trim() || null,
+      values,
+      note: $('#testNote').value.trim(),
+      updatedAt: new Date().toISOString()
+    });
+
+    let msg = 'Testergebnis gespeichert';
+    const v = values[t.main];
+    if (typeof v === 'number') {
+      const best = bestBefore(t, r.id);
+      const better = best == null ? false : (t.better === 'lower' ? v < best : v > best);
+      const reached = t.target && typeof t.target.value === 'number' &&
+        (t.better === 'lower' ? v <= t.target.value : v >= t.target.value);
+      if (reached) msg = '🎯 Zielmarke erreicht!';
+      else if (better) msg = '🏆 Neue Bestmarke!';
+    }
+
+    $('#testDialog').close();
+    if (testEdit.ctx) {
+      mutateItem(testEdit.ctx, testEdit.idx, (x) => { x.done = true; });
+    } else {
+      if (r.sessionId) markTestItem(r.sessionId, t.id, true);
+      save();
+    }
+    toast(msg);
+    refreshAfterTest();
+  }
+
+  function deleteTestResult() {
+    const r = data.planLog.tests.find((x) => x.id === testEdit.resultId);
+    if (!r || !confirm('Dieses Testergebnis löschen?')) return;
+    data.planLog.tests = data.planLog.tests.filter((x) => x.id !== r.id);
+    if (r.sessionId) markTestItem(r.sessionId, r.test, false);
+    save();
+    $('#testDialog').close();
+    toast('Testergebnis gelöscht');
+    refreshAfterTest();
+  }
+
+  function refreshAfterTest() {
+    if ($('#testHistoryDialog').open) renderTestHistory(historyTestId);
+    if (openSession) renderSessionPage();
+    if (currentView === 'plan') renderPlanTab();
+  }
+
+  /* ---------- Plan-Tab: Tests ---------- */
+
+  function sortedTests() {
+    return Object.values(plan.tests).sort((a, b) => a.id.localeCompare(b.id, 'de', { numeric: true }));
+  }
+
+  function renderPlanTests() {
+    const box = $('#planSegTests');
+    box.innerHTML = '';
+    const tests = sortedTests();
+    if (!tests.length) {
+      box.append(el('div', { class: 'card' }, el('p', { class: 'empty-note' }, 'Der Plan enthält keine Tests.')));
+      return;
+    }
+    const card = el('div', { class: 'card' },
+      el('div', { class: 'card-head' }, el('h2', null, '🧪 Tests')),
+      el('p', { class: 'hint' }, 'Antippen: Verlauf ansehen und Ergebnisse nachtragen.'));
+    for (const t of tests) {
+      const results = PlanLog.testResults(data.planLog, t.id);
+      const last = results[results.length - 1];
+      const sub = [];
+      if (t.target) sub.push(`Ziel ${t.target.text}`);
+      sub.push(results.length === 1 ? '1 Ergebnis' : `${results.length} Ergebnisse`);
+      card.append(el('button', { class: 'lib-row test-row', type: 'button', onclick: () => openTestHistory(t.id) },
+        el('span', { class: 'lib-label' }, t.id),
+        el('span', { class: 'lib-name' },
+          el('span', null, t.name),
+          el('span', { class: 'test-row-sub' }, sub.join(' · '))),
+        el('span', { class: 'test-row-last' }, last ? PlanLog.formatTestValue(t.fields.find((f) => f.key === t.main) || {}, last.values[t.main]) : '–'),
+        el('span', { class: 'plan-chevron', 'aria-hidden': 'true' }, '›')));
+    }
+    box.append(card);
+  }
+
+  function openTestHistory(testId) {
+    historyTestId = testId;
+    renderTestHistory(testId);
+    $('#testHistoryDialog').showModal();
+  }
+
+  function renderTestHistory(testId) {
+    const t = plan.tests[testId];
+    if (!t) return;
+    const mainField = t.fields.find((f) => f.key === t.main) || { type: 'number' };
+    $('#thTitle').textContent = `🧪 ${t.id} ${t.name}`;
+
+    const info = $('#thInfo');
+    info.innerHTML = '';
+    const facts = [];
+    if (t.target) facts.push(`🎯 Zielmarke: ${t.target.text}`);
+    facts.push(t.better === 'lower' ? 'weniger ist besser' : 'mehr ist besser');
+    info.append(el('p', { class: 'hint' }, facts.join(' · ')));
+    info.append(el('details', { class: 'test-howto' },
+      el('summary', null, 'So geht\'s'),
+      el('p', null, t.howTo),
+      t.note ? el('p', null, t.note) : null));
+
+    const results = PlanLog.testResults(data.planLog, testId);
+    const chart = $('#thChart');
+    chart.innerHTML = '';
+    const byDate = new Map();
+    for (const r of results) if (typeof r.values[t.main] === 'number') byDate.set(r.date, r.values[t.main]);
+    const entries = [...byDate].map(([key, value]) => ({ key, value }));
+    if (entries.length >= 2) {
+      drawLineChart(chart, {
+        series: [{ name: t.name, color: 'var(--series-1)', width: 2, r: 4, entries, labelLast: true }],
+        digits: mainField.type === 'km' ? 1 : 0,
+        minPad: 1,
+        formatValue: (v) => PlanLog.formatTestValue(mainField, v),
+        axisFormat: mainField.type === 'minsec' ? (v) => PlanLog.formatTestValue(mainField, v).replace(' min', '') : null,
+        target: t.target && typeof t.target.value === 'number' ? { value: t.target.value, label: `Ziel ${t.target.text}` } : null,
+        ariaLabel: `Verlauf ${t.name}`,
+        width: 380, height: 210
+      });
+    } else if (results.length) {
+      chart.append(el('p', { class: 'hint' }, 'Ab zwei Ergebnissen erscheint hier eine Kurve.'));
+    }
+
+    const tbl = $('#thTable');
+    tbl.innerHTML = '';
+    if (!results.length) {
+      tbl.append(el('p', { class: 'empty-note' }, 'Noch kein Ergebnis. Mit „+ Ergebnis“ nachtragen.'));
+      return;
+    }
+    const table = el('table', { class: 'test-table' },
+      el('thead', null, el('tr', null, el('th', null, 'Datum'), el('th', null, 'Runde'), el('th', null, 'Ergebnis'))));
+    const tbody = el('tbody');
+    for (const r of [...results].reverse()) {
+      tbody.append(el('tr', { tabindex: '0', onclick: () => openTestDialog(testId, { resultId: r.id }) },
+        el('td', null, formatDateShort(r.date)),
+        el('td', null, r.round || ''),
+        el('td', null, PlanLog.testSummary(t, r.values) + (r.note ? ` · ${r.note}` : ''))));
+    }
+    table.append(tbody);
+    tbl.append(table, el('p', { class: 'hint' }, 'Zeile antippen zum Bearbeiten.'));
+  }
+
   /* ---------- Spickzettel ---------- */
 
   function showInfo(title, sections) {
@@ -2492,9 +2782,11 @@
     document.querySelectorAll('#planContent .seg-btn').forEach((b) =>
       b.classList.toggle('active', b.dataset.seg === planSeg));
     $('#planSegWeek').hidden = planSeg !== 'week';
+    $('#planSegTests').hidden = planSeg !== 'tests';
     $('#planSegExercises').hidden = planSeg !== 'exercises';
     $('#planSegInfos').hidden = planSeg !== 'infos';
     if (planSeg === 'week') renderPlanWeek();
+    if (planSeg === 'tests') renderPlanTests();
     if (planSeg === 'exercises') renderPlanExercises();
     if (planSeg === 'infos') renderPlanInfos();
   }
@@ -2586,13 +2878,6 @@
     for (const [g, list] of groups) {
       const card = el('div', { class: 'card' }, el('div', { class: 'card-head' }, el('h2', null, g)));
       for (const ex of list) card.append(libRow(ex.label, ex.name, () => showExerciseInfo(ex.id)));
-      box.append(card);
-    }
-    const tests = Object.values(plan.tests)
-      .sort((a, b) => a.id.localeCompare(b.id, 'de', { numeric: true }));
-    if (tests.length) {
-      const card = el('div', { class: 'card' }, el('div', { class: 'card-head' }, el('h2', null, '🧪 Tests')));
-      for (const t of tests) card.append(libRow(t.id, t.name, () => showTestInfo(t.id)));
       box.append(card);
     }
   }
@@ -2911,6 +3196,9 @@
       b.addEventListener('click', () => { planSeg = b.dataset.seg; renderPlanTab(); }));
     $('#sessionBack').addEventListener('click', () => history.back());
     $('#moveDate').addEventListener('change', updateMoveDialog);
+    $('#testForm').addEventListener('submit', submitTestDialog);
+    $('#testDelete').addEventListener('click', deleteTestResult);
+    $('#thAdd').addEventListener('click', () => openTestDialog(historyTestId, { date: todayKey(), round: '' }));
     $('#sessionMove').addEventListener('click', () => { if (openSession) openMoveDialog(openSession.id); });
     window.addEventListener('popstate', () => {
       if (!$('#sessionPage').hidden) closeSessionPage();

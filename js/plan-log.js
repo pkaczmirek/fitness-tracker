@@ -222,6 +222,73 @@
     return parts.join(' · ');
   }
 
+  /* ---------- Tests (Spec 001, Schritt 3) ---------- */
+
+  /* Ergebnisse eines Tests, älteste zuerst */
+  function testResults(log, testId) {
+    return (log.tests || [])
+      .filter((r) => r.test === testId)
+      .sort((a, b) => (a.date === b.date ? (a.updatedAt || '').localeCompare(b.updatedAt || '') : a.date.localeCompare(b.date)));
+  }
+
+  /* Jüngstes Ergebnis eines Tests, ohne das der aktuellen Einheit, nicht nach maxDate */
+  function lastTestResult(log, testId, excludeSessionId, maxDate) {
+    const list = testResults(log, testId)
+      .filter((r) => !(excludeSessionId && r.sessionId === excludeSessionId) && (!maxDate || r.date <= maxDate));
+    return list.length ? list[list.length - 1] : null;
+  }
+
+  function sessionTestResult(log, sessionId, testId) {
+    return (log.tests || []).find((r) => r.sessionId === sessionId && r.test === testId) || null;
+  }
+
+  function mmss(sec) {
+    const s = Math.round(sec);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function formatTestValue(field, v) {
+    if (v == null || v === '') return '–';
+    switch (field.type) {
+      case 'seconds': return `${num(v)} s`;
+      case 'minsec': return `${mmss(v)} min`;
+      case 'km': return `${num(v)} km`;
+      case 'bpm': return `${num(v)}`;
+      case 'scale10': return `${num(v)}/10`;
+      case 'yesno': return v ? 'ja' : 'nein';
+      default: return typeof v === 'number' ? num(v) : String(v);
+    }
+  }
+
+  /* "45 s · Gehpausen: ja": Hauptwert ohne Namen, die übrigen mit Namen */
+  function testSummary(testDef, values) {
+    const parts = [];
+    const fields = testDef.fields || [];
+    const main = fields.find((f) => f.key === testDef.main);
+    if (main && values[main.key] != null && values[main.key] !== '') parts.push(formatTestValue(main, values[main.key]));
+    for (const f of fields) {
+      if (f === main) continue;
+      const v = values[f.key];
+      if (v == null || v === '') continue;
+      parts.push(`${f.label}: ${formatTestValue(f, v)}`);
+    }
+    return parts.join(' · ');
+  }
+
+  function hasTestValue(values) {
+    return Object.values(values || {}).some((v) => v != null && v !== '');
+  }
+
+  /* Bekannte Testrunden: aus dem Plan und aus bisherigen Ergebnissen */
+  function testRounds(store, log) {
+    const set = new Set();
+    for (const day of Object.values(store.days)) {
+      for (const s of day.sessions || []) if (s.testRound) set.add(s.testRound);
+    }
+    for (const r of log.tests || []) if (r.round) set.add(r.round);
+    return [...set];
+  }
+
   /* "12,5" oder "12.5" → 12.5; leer → null */
   function parseNum(s) {
     if (s == null) return null;
@@ -237,7 +304,8 @@
     sessionIndex, sessionsOn, movedAway, effectiveDate, applyMove,
     rowsDone, itemMeasured, itemHasData, hasData, sessionState,
     lastExerciseResult, prefillValue, newItemResult, matchesItem,
-    lastText, parseNum
+    lastText, parseNum,
+    testResults, lastTestResult, sessionTestResult, formatTestValue, testSummary, hasTestValue, testRounds
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PlanLog = api;

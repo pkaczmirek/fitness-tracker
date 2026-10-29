@@ -147,10 +147,12 @@
       <div id="planContent" hidden>
         <div class="seg" role="tablist">
           <button class="seg-btn active" data-seg="week" role="tab">Woche</button>
+          <button class="seg-btn" data-seg="tests" role="tab">Tests</button>
           <button class="seg-btn" data-seg="exercises" role="tab">Übungen</button>
           <button class="seg-btn" data-seg="infos" role="tab">Infos</button>
         </div>
         <div class="card" id="planSegWeek"></div>
+        <div id="planSegTests" hidden></div>
         <div id="planSegExercises" hidden></div>
         <div id="planSegInfos" hidden></div>
       </div>
@@ -401,6 +403,44 @@
       <div class="dialog-btns">
         <button type="button" class="btn" data-close id="piCancel">Abbrechen</button>
         <button type="button" class="btn btn-primary" id="piConfirm">Importieren</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="testDialog">
+    <form class="dialog-form" id="testForm">
+      <h3 id="testDialogTitle"></h3>
+      <p class="hint" id="testDialogInfo"></p>
+      <div id="testFields" class="test-fields"></div>
+      <div class="form-row">
+        <label>Datum
+          <input type="date" id="testDate" required>
+        </label>
+        <label>Runde
+          <input type="text" id="testRound" list="testRoundList" maxlength="40" placeholder="z. B. Test 2">
+        </label>
+      </div>
+      <datalist id="testRoundList"></datalist>
+      <label>Notiz (optional)
+        <input type="text" id="testNote" maxlength="200">
+      </label>
+      <div class="dialog-btns">
+        <button type="button" class="btn danger-btn test-delete" id="testDelete" hidden>Löschen</button>
+        <button type="button" class="btn" data-close>Abbrechen</button>
+        <button type="submit" class="btn btn-primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="testHistoryDialog">
+    <div class="dialog-form">
+      <h3 id="thTitle"></h3>
+      <div id="thInfo" class="test-history-info"></div>
+      <div id="thChart" class="chart-wrap"></div>
+      <div id="thTable"></div>
+      <div class="dialog-btns">
+        <button type="button" class="btn" data-close>Schließen</button>
+        <button type="button" class="btn btn-primary" id="thAdd">+ Ergebnis</button>
       </div>
     </div>
   </dialog>

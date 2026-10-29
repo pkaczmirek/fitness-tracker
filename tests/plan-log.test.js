@@ -104,3 +104,44 @@ test('Zahlen mit Komma', () => {
   assert.equal(PL.parseNum(''), null);
   assert.equal(PL.parseNum('abc'), null);
 });
+
+const T6 = { id: 'T6', main: 'km', fields: [
+  { key: 'km', label: 'Strecke (km)', type: 'km' },
+  { key: 'pulse', label: 'Ø-Puls', type: 'bpm' },
+  { key: 'walkBreaks', label: 'Gehpausen', type: 'yesno' }] };
+
+test('Testwerte formatieren', () => {
+  assert.equal(PL.formatTestValue({ type: 'seconds' }, 42), '42 s');
+  assert.equal(PL.formatTestValue({ type: 'minsec' }, 185), '3:05 min');
+  assert.equal(PL.formatTestValue({ type: 'km' }, 4.8), '4,8 km');
+  assert.equal(PL.formatTestValue({ type: 'scale10' }, 3), '3/10');
+  assert.equal(PL.formatTestValue({ type: 'yesno' }, false), 'nein');
+  assert.equal(PL.formatTestValue({ type: 'text' }, 'gelb'), 'gelb');
+  assert.equal(PL.formatTestValue({ type: 'number' }, null), '–');
+  assert.equal(PL.testSummary(T6, { km: 4.8, pulse: 148, walkBreaks: true }), '4,8 km · Ø-Puls: 148 · Gehpausen: ja');
+  assert.equal(PL.testSummary(T6, { pulse: 150 }), 'Ø-Puls: 150', 'Hauptwert fehlt noch');
+  assert.ok(PL.hasTestValue({ walkBreaks: false }), 'nein ist ein Wert');
+  assert.ok(!PL.hasTestValue({ km: null, note: '' }));
+});
+
+test('Testergebnisse: Reihenfolge, letztes Ergebnis, Ergebnis der Einheit', () => {
+  const log = PL.emptyLog();
+  log.tests.push({ id: 'b', test: 'T1', date: '2026-12-07', round: 'Test 2', sessionId: 's2', values: { seconds: 50 } });
+  log.tests.push({ id: 'a', test: 'T1', date: '2026-10-09', round: 'Eingangstest', sessionId: null, values: { seconds: 42 } });
+  log.tests.push({ id: 'c', test: 'T2', date: '2026-10-09', round: 'Eingangstest', sessionId: null, values: { seconds: 20 } });
+  assert.deepEqual(PL.testResults(log, 'T1').map((r) => r.id), ['a', 'b']);
+  assert.equal(PL.lastTestResult(log, 'T1', null, '2026-12-31').id, 'b');
+  assert.equal(PL.lastTestResult(log, 'T1', 's2', '2026-12-31').id, 'a', 'eigene Einheit ausgenommen');
+  assert.equal(PL.lastTestResult(log, 'T1', null, '2026-11-01').id, 'a', 'nicht aus der Zukunft');
+  assert.equal(PL.sessionTestResult(log, 's2', 'T1').id, 'b');
+  assert.equal(PL.sessionTestResult(log, 's2', 'T2'), null);
+});
+
+test('Bekannte Testrunden aus Plan und Ergebnissen', () => {
+  const log = PL.emptyLog();
+  log.tests.push({ id: 'x', test: 'T1', date: '2026-10-09', round: 'Fitness-Analyse', values: { seconds: 40 } });
+  const rounds = PL.testRounds(store, log);
+  assert.ok(rounds.includes('Eingangstest'));
+  assert.ok(rounds.includes('Fitness-Analyse'));
+  assert.equal(new Set(rounds).size, rounds.length, 'keine Doppelten');
+});
